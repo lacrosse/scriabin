@@ -14,7 +14,7 @@ import Routing
 -- MODEL
 
 type alias Model =
-  { currentPage : Routing.Model
+  { routing : Routing.Model
   , flash : Flash.Model
   , session : Session.Model
   , assemblages : AssemblageList.Model
@@ -22,7 +22,7 @@ type alias Model =
 
 initialModel : Navigation.Location -> Model
 initialModel navLocation =
-  { currentPage = Routing.initialModel navLocation
+  { routing = Routing.initialModel navLocation
   , assemblages = AssemblageList.initialModel
   , session = Session.initialModel
   , flash = Flash.initialModel
@@ -57,9 +57,9 @@ update msg model =
         )
     RoutingMsg msg ->
       let
-        (updatedCurrentPage, cmd) = Routing.update msg model.currentPage
+        (updatedRouting, cmd) = Routing.update msg model.routing
       in
-        ( { model | currentPage = updatedCurrentPage }
+        ( { model | routing = updatedRouting }
         , Cmd.map RoutingMsg cmd
         )
 
@@ -80,7 +80,7 @@ navLink page attributes =
 
 template : Model -> Html Msg
 template model =
-  case model.currentPage of
+  case model.routing.currentPage of
     Just Routing.Root ->
       text "Hi."
     Just Routing.NewSession ->
@@ -97,6 +97,7 @@ template model =
 view : Model -> Html Msg
 view model =
   let
+    threeBars = List.repeat 3 (span [ class "icon-bar" ] [])
     navbarHeader =
       div [ class "navbar-header" ]
         [ button
@@ -106,11 +107,7 @@ view model =
           , attribute "data-target" "#bs-example-navbar-collapse-1"
           , attribute "aria-expanded" "false"
           ]
-          [ span [ class "sr-only" ] [ text "Toggle navigation" ]
-          , span [ class "icon-bar" ] []
-          , span [ class "icon-bar" ] []
-          , span [ class "icon-bar" ] []
-          ]
+          ( span [ class "sr-only" ] [ text "Toggle navigation" ] :: threeBars )
         , navLink Routing.Root [ class "navbar-brand" ] (faText "music" "Celeste")
         ]
     leftNavbar =

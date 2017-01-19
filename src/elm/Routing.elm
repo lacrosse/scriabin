@@ -12,11 +12,11 @@ type Page
   | Composers
 
 type alias Model =
-  Maybe Page
+  { currentPage : Maybe Page }
 
 initialModel : Navigation.Location -> Model
-initialModel =
-  navLocationToPage
+initialModel navLoc =
+  { currentPage = navLocationToPage navLoc }
 
 -- UPDATE
 
@@ -30,7 +30,9 @@ update msg model =
     VisitPage page ->
       ( model, Navigation.newUrl (pageToString page) )
     UpdatePage navLoc ->
-      ( navLocationToPage navLoc, Cmd.none )
+      ( { model | currentPage = navLocationToPage navLoc }
+      , Cmd.none
+      )
 
 -- FUNCTIONS
 
