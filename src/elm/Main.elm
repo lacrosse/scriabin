@@ -188,19 +188,18 @@ fileTable : List File -> List (Html Msg)
 fileTable =
   List.map fileRowView
 
-assemblagesThroughAssemblies : Assemblage -> Store -> Assembly.Kind -> Assemblage.Kind -> List Assemblage
-assemblagesThroughAssemblies { id } { assemblies, assemblages } kind assemblageKind =
+assemblagesThroughAssemblies
+  : Assemblage
+  -> Store
+  -> (Assembly -> Int)
+  -> (Assembly -> Int)
+  -> Assembly.Kind
+  -> Assemblage.Kind
+  -> List Assemblage
+assemblagesThroughAssemblies { id } { assemblies, assemblages } foreignKey furtherForeignKey assemblyKind assemblageKind =
   assemblies
-    |> List.filter (\a -> a.childAssemblageId == id && a.kind == kind)
-    |> List.map .assemblageId
-    |> List.filterMap (findById assemblages)
-    |> List.filter (\a -> a.kind == assemblageKind)
-
-childAssemblagesThroughAssemblies : Assemblage -> Store -> Assembly.Kind -> Assemblage.Kind -> List Assemblage
-childAssemblagesThroughAssemblies { id } { assemblies, assemblages } kind assemblageKind =
-  assemblies
-    |> List.filter (\a -> a.assemblageId == id && a.kind == kind)
-    |> List.map .childAssemblageId
+    |> List.filter (\a -> (foreignKey a) == id && a.kind == assemblyKind)
+    |> List.map furtherForeignKey
     |> List.filterMap (findById assemblages)
     |> List.filter (\a -> a.kind == assemblageKind)
 
@@ -240,9 +239,9 @@ personView assemblage store =
       ]
     files = List.filterMap (findById store.files) assemblage.fileIds
     compositions =
-      childAssemblagesThroughAssemblies assemblage store Assembly.Composed Assemblage.Composition
+      assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Composed Assemblage.Composition
     reconstructions =
-      childAssemblagesThroughAssemblies assemblage store Assembly.Reconstructed Assemblage.Composition
+      assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Reconstructed Assemblage.Composition
   in
     header
     ++ (fileTable files)
@@ -259,14 +258,14 @@ compositionHeader assemblage store h1Link =
         [ text (Assemblage.fullName assemblage) ]
     nameHeader = h1 [] h1Contents
     composers =
-      assemblagesThroughAssemblies assemblage store Assembly.Composed Assemblage.Person
+      assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Composed Assemblage.Person
     composedByHeader =
       if List.isEmpty composers then
         []
       else
         [h3 [] (composedBy composers)]
     reconstructors =
-      assemblagesThroughAssemblies assemblage store Assembly.Reconstructed Assemblage.Person
+      assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Reconstructed Assemblage.Person
     reconstructedByHeader =
       if List.isEmpty reconstructors then
         []
@@ -293,7 +292,7 @@ compositionView assemblage store =
       compositionHeader assemblage store False
     tags = []
     recordings =
-      childAssemblagesThroughAssemblies assemblage store Assembly.Recorded Assemblage.Recording
+      assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Recorded Assemblage.Recording
     compositionFiles = []
   in
     header
@@ -305,7 +304,7 @@ recordingView : Assemblage -> Store -> List (Html Msg)
 recordingView assemblage store =
   let
     compositions =
-      assemblagesThroughAssemblies assemblage store Assembly.Recorded Assemblage.Composition
+      assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Recorded Assemblage.Composition
     header =
       compositions
         |> List.map (\c -> compositionHeader c store True)
@@ -313,15 +312,16 @@ recordingView assemblage store =
     files = List.filterMap (findById store.files) assemblage.fileIds
   in header ++ (fileTable files)
 
-data : List ( String, String ) -> List (Attribute Msg)
-data =
-  let mapper (key, value) = attribute ("data-" ++ key) value
+attrUmbrella : String -> List ( String, String ) -> List (Attribute Msg)
+attrUmbrella parent =
+  let mapper (key, value) = attribute (parent ++ "-" ++ key) value
   in List.map mapper
 
+data : List ( String, String ) -> List (Attribute Msg)
+data = attrUmbrella "data"
+
 aria : List ( String, String ) -> List (Attribute Msg)
-aria =
-  let mapper (key, value) = attribute ("aria-" ++ key) value
-  in List.map mapper
+aria = attrUmbrella "aria"
 
 view : Model -> Html Msg
 view model =
