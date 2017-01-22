@@ -204,35 +204,32 @@ childAssemblagesThroughAssemblies { id } { assemblies, assemblages } kind assemb
     |> List.filterMap (findById assemblages)
     |> List.filter (\a -> a.kind == assemblageKind)
 
-commasAnd : List (Html Msg) -> List (Html Msg) -> List (Html Msg)
-commasAnd acc list =
-  case list of
-    [head1, head2] ->
-      acc ++ [head1, text " and ", head2]
-    [head] ->
-      acc ++ [head]
-    [] ->
-      acc
-    head :: tail ->
-      commasAnd (acc ++ [head, text ", "]) tail
+prependAndIntersperse : String -> List Assemblage -> List (Html Msg)
+prependAndIntersperse string list =
+  let
+    intersperse list =
+      case list of
+        [] ->
+          []
+        [head] ->
+          [head]
+        [head1, head2] ->
+          [head1, text " and ", head2]
+        head :: tail ->
+          [head, text ", "] ++ (intersperse tail)
+    interspersed =
+      list
+        |> List.map assemblageLink
+        |> intersperse
+  in text string :: interspersed
 
 composedBy : List Assemblage -> List (Html Msg)
 composedBy composers =
-  let
-    list =
-      composers
-        |> List.map assemblageLink
-        |> commasAnd []
-  in text "composed by " :: list
+  prependAndIntersperse "composed by " composers
 
 reconstructedBy : List Assemblage -> List (Html Msg)
 reconstructedBy reconstructors =
-  let
-    list =
-      reconstructors
-        |> List.map assemblageLink
-        |> commasAnd []
-  in text "reconstructed by " :: list
+  prependAndIntersperse "reconstructed by " reconstructors
 
 personView : Assemblage -> Store -> List (Html Msg)
 personView assemblage store =
