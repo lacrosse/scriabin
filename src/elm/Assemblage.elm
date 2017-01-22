@@ -1,20 +1,41 @@
 module Assemblage exposing (..)
 
-import Html exposing (Html, p, text)
-
 -- MODEL
 
-type alias Model =
-  Assemblage
+type Kind
+  = Person
+  | Composition
+  | Recording
 
 type alias Assemblage =
-  { name : String
+  { id : Int
+  , name : String
+  , kind : Kind
+  , fileIds : List Int
   }
 
--- VIEW
+dummyComposer : Assemblage
+dummyComposer =
+  Assemblage 1 "Alexander Scriabin" Person []
 
-view : Model -> Html msg
-view assemblage =
-  p [] [
-    text assemblage.name
-  ]
+dummyComposition : Assemblage
+dummyComposition =
+  Assemblage 2 "Piano Sonata No. 2" Composition []
+
+dummyRecording : Assemblage
+dummyRecording =
+  Assemblage 3 "Maria Lettberg's recording" Recording [1]
+
+-- FUNCTIONS
+
+isComposer : Assemblage -> Bool
+isComposer { kind } =
+  case kind of
+    Person ->
+      True
+    _ ->
+      False
+
+fullName : Assemblage -> String
+fullName { name } =
+  name

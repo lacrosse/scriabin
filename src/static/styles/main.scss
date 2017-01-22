@@ -4,3 +4,7 @@ $icon-font-path: '~bootstrap-sass/assets/fonts/bootstrap/';
 
 $fa-font-path: '~font-awesome/fonts';
 @import '~font-awesome/scss/font-awesome';
+
+body {
+  font-family: 'PT Serif', serif;
+}

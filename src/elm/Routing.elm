@@ -1,74 +1,65 @@
 module Routing exposing (..)
 
-import Navigation
+import Navigation exposing (Location)
+import Html exposing (Html, Attribute, a)
+import Html.Attributes exposing (href)
+import Html.Events exposing (onWithOptions)
+import UrlParser exposing (Parser, parseHash, oneOf, top, map, s, (</>), int)
 
 -- MODEL
 
-type Page
+type Route
   = Root
   | NewSession
-  | NewAssemblage
-  | Assemblages
   | Composers
+  | Assemblage Int
 
 type alias Model =
-  { currentPage : Maybe Page }
+  { currentRoute : Maybe Route }
 
-initialModel : Navigation.Location -> Model
+initialModel : Location -> Model
 initialModel navLoc =
-  { currentPage = navLocationToPage navLoc }
+  { currentRoute = locationToRoute navLoc }
 
 -- UPDATE
 
 type Msg
-  = VisitPage Page
-  | UpdatePage Navigation.Location
+  = VisitPage Route
+  | UpdatePage Location
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
-    VisitPage page ->
-      ( model, Navigation.newUrl (pageToString page) )
+    VisitPage route ->
+      ( { model | currentRoute = Just route }
+      , Navigation.newUrl (routeToString route)
+      )
     UpdatePage navLoc ->
-      ( { model | currentPage = navLocationToPage navLoc }
+      ( { model | currentRoute = locationToRoute navLoc }
       , Cmd.none
       )
 
 -- FUNCTIONS
 
-navLocationToPage : Navigation.Location -> Maybe Page
-navLocationToPage { hash } =
-  stringToPage hash
+routingTable : List (Parser (Route -> c) c)
+routingTable =
+  [ map Assemblage (s "assemblages" </> int)
+  , map NewSession (s "sign-in")
+  , map Composers  (s "composers")
+  , map Root       (top)
+  ]
 
-stringToPage : String -> Maybe Page
-stringToPage string =
-  case string of
-    "" ->
-      Just Root
-    "#/" ->
-      Just Root
-    "#/sign-in" ->
-      Just NewSession
-    "#/assemblages" ->
-      Just Assemblages
-    "#/assemblages/new" ->
-      Just NewAssemblage
-    "#/composers" ->
-      Just Composers
-    _ ->
-      Nothing
+locationToRoute : Location -> Maybe Route
+locationToRoute = parseHash (oneOf routingTable)
 
--- Deprecated.
-pageToString : Page -> String
-pageToString page =
-  case page of
+routeToString : Route -> String
+routeToString route =
+  case route of
     Root ->
-      "#/"
+      "/"
     NewSession ->
       "#/sign-in"
-    Assemblages ->
-      "#/assemblages"
-    NewAssemblage ->
-      pageToString (Assemblages) ++ "/new"
     Composers ->
       "#/composers"
+    Assemblage id ->
+      "#/assemblages/" ++ (toString id)

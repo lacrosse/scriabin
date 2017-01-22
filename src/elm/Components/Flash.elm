@@ -21,7 +21,7 @@ initialModel =
 
 -- VIEW
 
-view : Model -> Html msg
+view : Model -> List (Html msg)
 view model =
   let
     paragraph styling string =
@@ -29,8 +29,8 @@ view model =
   in
     case model of
       Just (Info, string) ->
-        paragraph "info" string
+        [paragraph "info" string]
       Just (Error, string) ->
-        paragraph "danger" string
+        [paragraph "danger" string]
       Nothing ->
-        text ""
+        []
