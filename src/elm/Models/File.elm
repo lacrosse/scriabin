@@ -1,4 +1,4 @@
-module File exposing (..)
+module Models.File exposing (..)
 
 -- MODEL
 

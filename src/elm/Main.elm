@@ -1,24 +1,29 @@
 module Main exposing (..)
 
-import Html exposing (Html, Attribute, text, a,
-                      div, span, button, ul, li,
-                      main_, nav, h1, h3, h4, p,
-                      small, table, thead, tbody,
-                      tr, th, td)
-import Html.Attributes exposing (class, type_, attribute, href, target)
-import Html.Events exposing (onClick, onWithOptions)
+import Html exposing (Html, Attribute,
+                      div, main_, nav,
+                      text, a, span, button, h1, h3, h4,
+                      p, i, small, ul, li,
+                      table, thead, tbody, tr, th, td,
+                      form, input, label)
+import Html.Attributes exposing (class, id, type_, attribute, href, target, placeholder)
+import Html.Events exposing (onClick, onWithOptions, onSubmit)
+import Http
 import Components.FontAwesome exposing (faText)
-import Session
+import Session exposing (Session)
 import Components.Flash as Flash
 import Navigation
 import Routing
 import Regex
-import Json.Decode
+import Json.Decode as JD
+import Json.Encode as JE
 import Store exposing (Store)
-import Assemblage exposing (Assemblage)
-import Tag exposing (Tag)
-import Assembly exposing (Assembly)
-import File exposing (File)
+import Models.Assemblage as Assemblage exposing (Assemblage)
+import Models.Assembly as Assembly exposing (Assembly)
+import Models.Tag as Tag exposing (Tag)
+import Models.File as File exposing (File)
+import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
+import Task
 
 main : Program Never Model Msg
 main =
@@ -26,7 +31,7 @@ main =
     { init = init
     , view = view
     , update = update
-    , subscriptions = \_ -> Sub.none
+    , subscriptions = always Sub.none
     }
 
 -- MODEL
@@ -56,6 +61,10 @@ init navLocation =
 
 type Msg
   = Noop
+  | SignIn
+  | SignInSucceed Session.User
+  | SignInFail Http.Error
+  | SignOut
   | SessionMsg Session.Msg
   | RoutingMsg Routing.Msg
 
@@ -63,42 +72,78 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
     Noop ->
-      ( model
-      , Cmd.none
-      )
-    SessionMsg msg ->
+      ( model, Cmd.none )
+
+    SignIn ->
       let
-        (updatedSession, cmd) = Session.update msg model.session
-      in
-        ( { model | session = updatedSession }
-        , Cmd.map SessionMsg cmd
-        )
+        signIn { username, password } =
+          let
+            url = "http://localhost:4000/api/session"
+            sessionObject =
+              JE.object
+                [ ("username", JE.string username)
+                , ("password", JE.string password)
+                ]
+            wrappedSession = JE.object [ ( "session", sessionObject ) ]
+            httpBody = Http.jsonBody wrappedSession
+            sessionDecoder =
+              JD.map2 Session.User
+                (JD.at ["session", "username"] JD.string)
+                (JD.at ["session", "jwt"] JD.string)
+            fetch = Http.toTask (Http.post url httpBody sessionDecoder)
+            process result =
+              case result of
+                Ok user ->
+                  SignInSucceed user
+                Err error ->
+                  SignInFail error
+          in
+            Task.attempt process fetch
+      in ( model, signIn model.session.wannabe )
+    SignOut ->
+      let
+        old = model.session
+        new = { old | user = Nothing }
+      in ( { model | session = new }, Cmd.none )
+    SignInSucceed user ->
+      let
+        old = model.session
+        new = { old | user = Just user }
+        redirectCmd = Task.perform (RoutingMsg << Routing.SetRoute) <| Task.succeed Routing.Root
+      in ( { model | session = new }, redirectCmd )
+    SignInFail error ->
+      case error of
+        Http.BadPayload message response ->
+          ( model, Cmd.none )
+        Http.BadStatus resp ->
+          let (updatedFlash, cmd) = Flash.update (Flash.DeriveFrom resp) model.flash
+          in ( { model | flash = updatedFlash }, Cmd.none )
+        _ ->
+          ( model, Cmd.none )
+
+    SessionMsg msg ->
+      let (updatedSession, cmd) = Session.update msg model.session
+      in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     RoutingMsg msg ->
       let
-        (updatedRouting, cmd) = Routing.update msg model.routing
-      in
-        ( { model | routing = updatedRouting }
-        , Cmd.map RoutingMsg cmd
-        )
+        (updatedFlash, flashCmd) = Flash.update Flash.Flush model.flash
+        (updatedRouting, subCmd) = Routing.update msg model.routing
+        routingCmd = Cmd.map RoutingMsg subCmd
+        cmd = Cmd.batch [flashCmd, routingCmd]
+      in ( { model | flash = updatedFlash, routing = updatedRouting }, cmd )
 
 -- VIEW
 
 navLink : Routing.Route -> List (Attribute Msg) -> List (Html Msg) -> Html Msg
-navLink page attributes =
-  let
-    string = Routing.routeToString page
-    options = { stopPropagation = True, preventDefault = True }
-    decode = Json.Decode.succeed (RoutingMsg (Routing.VisitPage page))
-    on = onWithOptions "click" options decode
-  in a (href string :: on :: attributes)
+navLink = Routing.navLink RoutingMsg
 
 template : Model -> List (Html Msg)
-template { routing, store } =
+template { routing, store, session } =
   case routing.currentRoute of
     Just Routing.Root ->
       [root]
     Just Routing.NewSession ->
-      newSessionView
+      newSessionView session
     Just Routing.Composers ->
       let assemblages = List.filter Assemblage.isComposer store.assemblages
       in assemblagesView assemblages
@@ -122,9 +167,35 @@ notFound =
     , p [] [ text "Try again." ]
     ]
 
-newSessionView : List (Html msg)
-newSessionView =
-  [text "Sign in please"]
+newSessionView : Session -> List (Html Msg)
+newSessionView model =
+  let
+    form =
+      [ h1 [] [ text "Sign In" ]
+      , horizontalForm SignIn
+        [ inputFormGroup
+          "user"
+          "username"
+          "Username"
+          "text"
+          model.wannabe.username
+          (SessionMsg << Session.UpdateWannabeUsername)
+          [ placeholder "seanbooth" ]
+        , inputFormGroup
+          "user"
+          "password"
+          "Password"
+          "password"
+          model.wannabe.password
+          (SessionMsg << Session.UpdateWannabePassword)
+          [ placeholder "6IE.CR" ]
+        , div [ class "form-group" ]
+          [ div [ class "col-lg-10 col-lg-offset-2" ]
+            [ button [ type_ "submit", class "btn btn-primary" ] (faText "sign-in" "Sign In") ]
+          ]
+        ]
+      ]
+  in form
 
 assemblagesView : List Assemblage -> List (Html Msg)
 assemblagesView list =
@@ -140,8 +211,11 @@ assemblageRowView a =
 
 wikipediaPath : String -> String
 wikipediaPath name =
-  let base = "https://en.wikipedia.org/wiki/"
-  in base ++ Regex.replace Regex.All (Regex.regex " ") (\_ -> "_") name
+  let
+    base = "https://en.wikipedia.org/wiki/"
+    wikify = Regex.replace Regex.All (Regex.regex " ") (always "_")
+    articleName = wikify name
+  in base ++ articleName
 
 fileRowView : File -> Html Msg
 fileRowView { name } =
@@ -203,32 +277,27 @@ assemblagesThroughAssemblies { id } { assemblies, assemblages } foreignKey furth
     |> List.filterMap (findById assemblages)
     |> List.filter (\a -> a.kind == assemblageKind)
 
-prependAndIntersperse : String -> List Assemblage -> List (Html Msg)
-prependAndIntersperse string list =
-  let
-    intersperse list =
-      case list of
-        [] ->
-          []
-        [head] ->
-          [head]
-        [head1, head2] ->
-          [head1, text " and ", head2]
-        head :: tail ->
-          [head, text ", "] ++ (intersperse tail)
-    interspersed =
-      list
-        |> List.map assemblageLink
-        |> intersperse
-  in text string :: interspersed
+enumerateHuman : List (Html Msg) -> List (Html Msg)
+enumerateHuman list =
+  case list of
+    [] ->
+      []
+    [head] ->
+      [head]
+    [head1, head2] ->
+      [head1, text " and ", head2]
+    head :: tail ->
+      [head, text ", "] ++ (enumerateHuman tail)
+
+prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
+prependAndEnumerateLinks str =
+  (::) (text (str ++ " ")) << enumerateHuman << (List.map assemblageLink)
 
 composedBy : List Assemblage -> List (Html Msg)
-composedBy composers =
-  prependAndIntersperse "composed by " composers
+composedBy = prependAndEnumerateLinks "composed by"
 
 reconstructedBy : List Assemblage -> List (Html Msg)
-reconstructedBy reconstructors =
-  prependAndIntersperse "reconstructed by " reconstructors
+reconstructedBy = prependAndEnumerateLinks "reconstructed by"
 
 personView : Assemblage -> Store -> List (Html Msg)
 personView assemblage store =
@@ -347,13 +416,16 @@ view model =
           ]
         ]
     sessionNav =
-      case model.session of
-        Just session ->
+      case model.session.user of
+        Just user ->
           li [ class "dropdown" ]
-            [ a [ href "#", class "dropdown-toggle", attribute "data-toggle" "dropdown", attribute "role" "button", attribute "aria-haspopup" "true", attribute "aria-expanded" "false" ]
-              (faText "user-circle-o" session.user.username)
+            [ a
+              ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
+                ++ data [("toggle", "dropdown")]
+                ++ aria [("haspopup", "true"), ("expanded", "false")])
+              (faText "user-circle-o" user.username)
               , ul [ class "dropdown-menu" ]
-              [ li [] [ a [ href "#", onClick (SessionMsg Session.SignOut) ] (faText "sign-out" "Sign Out") ] ]
+              [ li [] [ a [ href "#", onClick SignOut ] (faText "sign-out" "Sign Out") ] ]
             ]
         Nothing ->
           li []
@@ -397,5 +469,4 @@ findById list fileId =
   findInList (\f -> f.id == fileId) list
 
 processUrl : Navigation.Location -> Msg
-processUrl navLoc =
-  RoutingMsg (Routing.UpdatePage navLoc)
+processUrl = RoutingMsg << Routing.VisitLocation

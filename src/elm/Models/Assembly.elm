@@ -1,4 +1,4 @@
-module Assembly exposing (..)
+module Models.Assembly exposing (..)
 
 -- MODEL
 

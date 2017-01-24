@@ -1,6 +1,6 @@
-module Tag exposing (..)
+module Models.Tag exposing (..)
 
--- MODULE
+-- MODEL
 
 type alias Tag =
   { id : Int

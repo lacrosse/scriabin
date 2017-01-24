@@ -1,8 +1,8 @@
 module Store exposing (..)
 
-import Assemblage exposing (Assemblage)
-import Assembly exposing (Assembly)
-import File exposing (File)
+import Models.Assemblage as Assemblage exposing (Assemblage)
+import Models.Assembly as Assembly exposing (Assembly)
+import Models.File as File exposing (File)
 
 -- MODEL
 

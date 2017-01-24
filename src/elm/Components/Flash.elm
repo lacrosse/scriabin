@@ -2,6 +2,8 @@ module Components.Flash exposing (..)
 
 import Html exposing (Html, p, text)
 import Html.Attributes exposing (class, attribute)
+import Json.Decode as JD
+import Http
 
 -- MODEL
 
@@ -18,6 +20,27 @@ type alias Model =
 initialModel : Model
 initialModel =
   Nothing
+
+-- UPDATE
+
+type Msg
+  = Flush
+  | DeriveFrom (Http.Response String)
+
+update : Msg -> Model -> ( Model, Cmd msg )
+update msg model =
+  case msg of
+    DeriveFrom { body } ->
+      let
+        decoder = JD.decodeString (JD.field "error" JD.string)
+        message =
+          case decoder body of
+            Ok val -> val
+            _ -> "Something went wrong!"
+        flash = (Error, message)
+      in ( Just flash, Cmd.none )
+    Flush ->
+      ( Nothing, Cmd.none )
 
 -- VIEW
 

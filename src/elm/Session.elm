@@ -1,57 +1,53 @@
 module Session exposing (..)
 
-import Http
-import Task
-
 -- MODEL
 
-type alias Model =
-  Maybe Session
+type alias Model = Session
 
 type alias Session =
-  { user : User
+  { user : Maybe User
+  , wannabe : Wannabe
   }
 
 type alias User =
   { username : String
+  , jwt : String
   }
+
+type alias Wannabe =
+  { username : String
+  , password : String
+  }
+
+initialWannabe : Wannabe
+initialWannabe =
+  { username = "", password = "" }
 
 initialModel : Model
 initialModel =
-  Nothing
+  { user = Nothing
+  , wannabe = initialWannabe
+  }
 
 -- UPDATE
 
 type Msg
-  = SignIn String String
-  | SignInSucceed User
-  | SignInFail Http.Error
-  | SignOut
+  = UpdateWannabeUsername String
+  | UpdateWannabePassword String
+  | FlushWannabe
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    SignIn username password ->
-      ( model, signIn username password )
-    SignOut ->
-      ( Nothing, Cmd.none )
-    SignInSucceed user ->
-      ( Just { user = user }, Cmd.none )
-    SignInFail error ->
-      case error of
-        Http.BadPayload message response ->
-          ( model, Cmd.none )
-        _ ->
-          ( model, Cmd.none )
-
--- HTTP
-
-signIn : String -> String -> Cmd Msg
-signIn username password =
-  let processSignIn result =
-    case result of
-      Ok user ->
-        SignInSucceed user
-      Err error ->
-        SignInFail error
-  in Task.attempt processSignIn (Task.succeed { username = username })
+    UpdateWannabeUsername value ->
+      let
+        old = model.wannabe
+        new = { old | username = value }
+      in ( { model | wannabe = new }, Cmd.none )
+    UpdateWannabePassword value ->
+      let
+        old = model.wannabe
+        new = { old | password = value }
+      in ( { model | wannabe = new }, Cmd.none )
+    FlushWannabe ->
+      ( { model | wannabe = initialWannabe }, Cmd.none )
