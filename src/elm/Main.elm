@@ -10,6 +10,7 @@ import Html.Attributes exposing (class, id, type_, attribute, href, target, plac
 import Html.Events exposing (onClick, onWithOptions, onSubmit)
 import Http
 import Components.FontAwesome exposing (faText)
+import Components.Html exposing (data, aria)
 import Session exposing (Session)
 import Components.Flash as Flash
 import Navigation
@@ -24,10 +25,13 @@ import Models.Tag as Tag exposing (Tag)
 import Models.File as File exposing (File)
 import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
 import Task
+import Jwt
+import Dict
+import Celeste exposing (apiUrl)
 
 main : Program Never Model Msg
 main =
-  Navigation.program processUrl
+  Navigation.program VisitLocation
     { init = init
     , view = view
     , update = update
@@ -43,19 +47,16 @@ type alias Model =
   , store : Store.Model
   }
 
-initialModel : Navigation.Location -> Model
-initialModel navLocation =
-  { routing = Routing.initialModel navLocation
-  , session = Session.initialModel
-  , flash = Flash.initialModel
-  , store = Store.initialModel
-  }
-
 init : Navigation.Location -> ( Model, Cmd Msg )
-init navLocation =
-  ( initialModel navLocation
-  , Cmd.none
-  )
+init navLoc =
+  let
+    preModel =
+      { routing = Routing.initialModel
+      , session = Session.initialModel
+      , flash = Flash.initialModel
+      , store = Store.initialModel
+      }
+  in processLocation navLoc preModel
 
 -- UPDATE
 
@@ -66,7 +67,10 @@ type Msg
   | SignInFail Http.Error
   | SignOut
   | SessionMsg Session.Msg
-  | RoutingMsg Routing.Msg
+  | FlashMsg Flash.Msg
+  | SetRoute Routing.Route
+  | VisitLocation Navigation.Location
+  | StoreRecords Celeste.ResponseTuple
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -78,27 +82,21 @@ update msg model =
       let
         signIn { username, password } =
           let
-            url = "http://localhost:4000/api/session"
+            url = apiUrl "/session"
             sessionObject =
               JE.object
                 [ ("username", JE.string username)
                 , ("password", JE.string password)
                 ]
             wrappedSession = JE.object [ ( "session", sessionObject ) ]
-            httpBody = Http.jsonBody wrappedSession
-            sessionDecoder =
-              JD.map2 Session.User
-                (JD.at ["session", "username"] JD.string)
-                (JD.at ["session", "jwt"] JD.string)
-            fetch = Http.toTask (Http.post url httpBody sessionDecoder)
+            decodeAttr str = JD.at ["session", str] JD.string
+            sessionDecoder = JD.map2 Session.User (decodeAttr "username") (decodeAttr "jwt")
+            fetch = Jwt.authenticate url sessionDecoder wrappedSession
             process result =
               case result of
-                Ok user ->
-                  SignInSucceed user
-                Err error ->
-                  SignInFail error
-          in
-            Task.attempt process fetch
+                Ok user -> SignInSucceed user
+                Err error -> SignInFail error
+          in Http.send process fetch
       in ( model, signIn model.session.wannabe )
     SignOut ->
       let
@@ -109,33 +107,55 @@ update msg model =
       let
         old = model.session
         new = { old | user = Just user }
-        redirectCmd = Task.perform (RoutingMsg << Routing.SetRoute) <| Task.succeed Routing.Root
+        redirectCmd = Task.perform SetRoute <| Task.succeed Routing.Root
       in ( { model | session = new }, redirectCmd )
     SignInFail error ->
       case error of
         Http.BadPayload message response ->
           ( model, Cmd.none )
         Http.BadStatus resp ->
-          let (updatedFlash, cmd) = Flash.update (Flash.DeriveFrom resp) model.flash
-          in ( { model | flash = updatedFlash }, Cmd.none )
+          update (FlashMsg (Flash.DeriveFromResponse resp)) model
         _ ->
           ( model, Cmd.none )
 
+    FlashMsg msg ->
+      let (updatedFlash, cmd) = Flash.update msg model.flash
+      in ( { model | flash = updatedFlash }, Cmd.map FlashMsg cmd )
     SessionMsg msg ->
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
-    RoutingMsg msg ->
+
+    SetRoute route ->
+      ( model, Navigation.newUrl (Routing.routeToString route) )
+    VisitLocation navLoc ->
       let
-        (updatedFlash, flashCmd) = Flash.update Flash.Flush model.flash
-        (updatedRouting, subCmd) = Routing.update msg model.routing
-        routingCmd = Cmd.map RoutingMsg subCmd
-        cmd = Cmd.batch [flashCmd, routingCmd]
-      in ( { model | flash = updatedFlash, routing = updatedRouting }, cmd )
+        (newModel, fetchCmd) = processLocation navLoc model
+        (updatedFlash, flashCmd) = Flash.update Flash.Flush newModel.flash
+        cmd = Cmd.batch [fetchCmd, flashCmd]
+      in ( { newModel | flash = updatedFlash }, cmd )
+    StoreRecords (assemblages, assemblies, files) ->
+      let
+        old = model.store
+        dictifyById = Dict.fromList << List.map (\a -> (a.id, a))
+        dictifyByComposite = Dict.fromList << List.map (\a -> ((a.assemblageId, a.childAssemblageId), a))
+        assemblagesDict = dictifyById assemblages
+        assembliesDict = dictifyByComposite assemblies
+        filesDict = dictifyById files
+        newAssemblages = Dict.union assemblagesDict old.assemblages
+        newAssemblies = Dict.union assembliesDict old.assemblies
+        newFiles = Dict.union filesDict old.files
+        new = { old | assemblages = newAssemblages, assemblies = newAssemblies, files = newFiles }
+      in ( { model | store = new }, Cmd.none )
 
 -- VIEW
 
 navLink : Routing.Route -> List (Attribute Msg) -> List (Html Msg) -> Html Msg
-navLink = Routing.navLink RoutingMsg
+navLink route =
+  let
+    string = Routing.routeToString route
+    options = { stopPropagation = True, preventDefault = True }
+    on = onWithOptions "click" options (JD.succeed << SetRoute <| route)
+  in (a << (::) (href string) << (::) on)
 
 template : Model -> List (Html Msg)
 template { routing, store, session } =
@@ -145,10 +165,12 @@ template { routing, store, session } =
     Just Routing.NewSession ->
       newSessionView session
     Just Routing.Composers ->
-      let assemblages = List.filter Assemblage.isComposer store.assemblages
+      let
+        assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
+        assemblages = ((List.sortBy .name) << List.map Tuple.second << Dict.toList) assemblagesStore
       in assemblagesView assemblages
     Just (Routing.Assemblage id) ->
-      case findInList (\a -> a.id == id) store.assemblages of
+      case Dict.get id store.assemblages of
         Just assemblage ->
           assemblageView assemblage store
         Nothing ->
@@ -157,15 +179,14 @@ template { routing, store, session } =
       [notFound]
 
 root : Html msg
-root =
-  text "Hi."
+root = text "Hi."
 
 notFound : Html msg
 notFound =
-  div []
-    [ h1 [] [ text "Not found" ]
-    , p [] [ text "Try again." ]
-    ]
+  let
+    h = h1 [] [ text "Not found" ]
+    par = p [] [ text "Try again." ]
+  in div [] [ h, par ]
 
 newSessionView : Session -> List (Html Msg)
 newSessionView model =
@@ -234,6 +255,8 @@ assemblageView assemblage store =
       compositionView assemblage store
     Assemblage.Recording ->
       recordingView assemblage store
+    Assemblage.General ->
+      personView assemblage store
 
 assemblageRow : Assemblage -> Html Msg
 assemblageRow a =
@@ -272,10 +295,11 @@ assemblagesThroughAssemblies
   -> List Assemblage
 assemblagesThroughAssemblies { id } { assemblies, assemblages } foreignKey furtherForeignKey assemblyKind assemblageKind =
   assemblies
-    |> List.filter (\a -> (foreignKey a) == id && a.kind == assemblyKind)
+    |> Dict.filter (\_ a -> (foreignKey a) == id && (.kind a) == assemblyKind)
+    |> Dict.values
     |> List.map furtherForeignKey
-    |> List.filterMap (findById assemblages)
-    |> List.filter (\a -> a.kind == assemblageKind)
+    |> List.filterMap (\id -> Dict.get id assemblages)
+    |> List.filter (\a -> (.kind a) == assemblageKind)
 
 enumerateHuman : List (Html Msg) -> List (Html Msg)
 enumerateHuman list =
@@ -306,7 +330,7 @@ personView assemblage store =
       [ h1 [] [ text assemblage.name ]
       , p [] [ a [ href (wikipediaPath assemblage.name), target "_blank" ] [ text "Wikipedia" ] ]
       ]
-    files = List.filterMap (findById store.files) assemblage.fileIds
+    files = List.filterMap (\id -> Dict.get id store.files) assemblage.fileIds
     compositions =
       assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Composed Assemblage.Composition
     reconstructions =
@@ -374,23 +398,14 @@ recordingView assemblage store =
   let
     compositions =
       assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Recorded Assemblage.Composition
-    header =
+    inheritedHeader =
       compositions
         |> List.map (\c -> compositionHeader c store True)
         |> List.foldr (++) []
-    files = List.filterMap (findById store.files) assemblage.fileIds
-  in header ++ (fileTable files)
-
-attrUmbrella : String -> List ( String, String ) -> List (Attribute Msg)
-attrUmbrella parent =
-  let mapper (key, value) = attribute (parent ++ "-" ++ key) value
-  in List.map mapper
-
-data : List ( String, String ) -> List (Attribute Msg)
-data = attrUmbrella "data"
-
-aria : List ( String, String ) -> List (Attribute Msg)
-aria = attrUmbrella "aria"
+    recordingHeader =
+      [ h4 [] [ text ("recording: " ++ assemblage.name) ] ]
+    files = List.filterMap (\id -> Dict.get id store.files) assemblage.fileIds
+  in inheritedHeader ++ recordingHeader ++ (fileTable files)
 
 view : Model -> Html Msg
 view model =
@@ -399,32 +414,35 @@ view model =
     navbarHeader =
       div [ class "navbar-header" ]
         [ button
-          (
-            [ type_ "button"
+          ( [ type_ "button"
             , class "navbar-toggle collapsed"
             ]
-            ++ (data [("toggle", "collapse")])
-            ++ (aria [("expanded", "false")])
+          ++ (data [("toggle", "collapse")])
+          ++ (aria [("expanded", "false")])
           )
           ( span [ class "sr-only" ] [ text "Toggle navigation" ] :: threeBars )
         , navLink Routing.Root [ class "navbar-brand" ] (faText "music" "Celeste")
         ]
     leftNavbar =
-      ul [ class "nav navbar-nav" ]
-        [ li []
-          [ navLink Routing.Composers [] [ text "Composers" ]
+      case model.session.user of
+        Just _ ->
+          [ ul [ class "nav navbar-nav" ]
+            [ li [] [ navLink Routing.Composers [] [ text "Composers" ] ]
+            ]
           ]
-        ]
+        Nothing ->
+          []
     sessionNav =
       case model.session.user of
         Just user ->
           li [ class "dropdown" ]
             [ a
               ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
-                ++ data [("toggle", "dropdown")]
-                ++ aria [("haspopup", "true"), ("expanded", "false")])
+              ++ data [("toggle", "dropdown")]
+              ++ aria [("haspopup", "true"), ("expanded", "false")]
+              )
               (faText "user-circle-o" user.username)
-              , ul [ class "dropdown-menu" ]
+            , ul [ class "dropdown-menu" ]
               [ li [] [ a [ href "#", onClick SignOut ] (faText "sign-out" "Sign Out") ] ]
             ]
         Nothing ->
@@ -432,16 +450,13 @@ view model =
             [ navLink Routing.NewSession [] (faText "sign-in" "Sign In")
             ]
     rightNavbar =
-      ul [ class "nav navbar-nav navbar-right" ] [ sessionNav ]
+      [ ul [ class "nav navbar-nav navbar-right" ] [ sessionNav ] ]
   in
     div []
       [ nav [ class "navbar navbar-default" ]
         [ div [ class "container" ]
           [ navbarHeader
-          , div [ class "collapse navbar-collapse" ]
-            [ leftNavbar
-            , rightNavbar
-            ]
+          , div [ class "collapse navbar-collapse" ] (leftNavbar ++ rightNavbar)
           ]
         ]
         , div [ class "container" ]
@@ -453,20 +468,33 @@ view model =
 
 -- FUNCTIONS
 
-findInList : (a -> Bool) -> List a -> Maybe a
-findInList predicate list =
-  case list of
-    [] ->
-      Nothing
-    head :: tail ->
-      if predicate head then
-        Just head
-      else
-        findInList predicate tail
+handleCelesteResponse : Result Jwt.JwtError Celeste.Response -> Msg
+handleCelesteResponse response =
+  case response of
+    Ok cResp ->
+      StoreRecords (Celeste.responseToTuple cResp)
+    Err (Jwt.HttpError (Http.BadPayload err _)) ->
+      (FlashMsg << Flash.DeriveFromString) err
+    _ ->
+      Noop
 
-findById : List { b | id : a } -> a -> Maybe { b | id : a }
-findById list fileId =
-  findInList (\f -> f.id == fileId) list
+fetch : Celeste.Route -> String -> Cmd Msg
+fetch = Store.fetch handleCelesteResponse
 
-processUrl : Navigation.Location -> Msg
-processUrl = RoutingMsg << Routing.VisitLocation
+processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
+processLocation navLoc model =
+  let
+    route = Routing.locationToRoute navLoc
+    newModel = { model | routing = { currentRoute = route } }
+    authorized f =
+      case newModel.session.user of
+        Just { jwt } -> f jwt
+        Nothing -> Cmd.none
+    fetchCmd =
+      case route of
+        Just (Routing.Assemblage id) ->
+          (authorized << fetch) (Celeste.Assemblage id)
+        Just Routing.Composers ->
+          (authorized << fetch) Celeste.Composers
+        _ -> Cmd.none
+  in ( newModel, fetchCmd )

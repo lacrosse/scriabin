@@ -25,12 +25,13 @@ initialModel =
 
 type Msg
   = Flush
-  | DeriveFrom (Http.Response String)
+  | DeriveFromResponse (Http.Response String)
+  | DeriveFromString String
 
 update : Msg -> Model -> ( Model, Cmd msg )
 update msg model =
   case msg of
-    DeriveFrom { body } ->
+    DeriveFromResponse { body } ->
       let
         decoder = JD.decodeString (JD.field "error" JD.string)
         message =
@@ -39,6 +40,8 @@ update msg model =
             _ -> "Something went wrong!"
         flash = (Error, message)
       in ( Just flash, Cmd.none )
+    DeriveFromString string ->
+      ( Just (Error, string), Cmd.none )
     Flush ->
       ( Nothing, Cmd.none )
 

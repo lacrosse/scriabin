@@ -1,11 +1,14 @@
 module Models.Assemblage exposing (..)
 
+import Json.Decode as JD
+
 -- MODEL
 
 type Kind
   = Person
   | Composition
   | Recording
+  | General
 
 type alias Assemblage =
   { id : Int
@@ -39,3 +42,21 @@ isComposer { kind } =
 fullName : Assemblage -> String
 fullName { name } =
   name
+
+parseKind : String -> Kind
+parseKind string =
+  case string of
+    "person" -> Person
+    "composition" -> Composition
+    "recording" -> Recording
+    _ -> General
+
+-- DECODERS
+
+jsonDecoder : JD.Decoder Assemblage
+jsonDecoder =
+  JD.map4 Assemblage
+    (JD.field "id" JD.int)
+    (JD.field "name" JD.string)
+    ((JD.map parseKind << JD.field "kind") JD.string)
+    ((JD.map (Maybe.withDefault []) << JD.maybe << JD.field "file_ids" << JD.list) JD.int)

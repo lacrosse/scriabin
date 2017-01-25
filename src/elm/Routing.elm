@@ -1,11 +1,7 @@
 module Routing exposing (..)
 
 import Navigation exposing (Location)
-import Html exposing (Html, Attribute, a)
-import Html.Attributes exposing (href)
-import Html.Events exposing (onWithOptions)
 import UrlParser exposing (Parser, parseHash, oneOf, top, map, s, (</>), int)
-import Json.Decode
 
 -- MODEL
 
@@ -18,34 +14,9 @@ type Route
 type alias Model =
   { currentRoute : Maybe Route }
 
-initialModel : Location -> Model
-initialModel navLoc =
-  { currentRoute = locationToRoute navLoc }
-
--- UPDATE
-
-type Msg
-  = SetRoute Route
-  | VisitLocation Location
-
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-  case msg of
-    SetRoute route ->
-      ( model, Navigation.newUrl (routeToString route) )
-    VisitLocation navLoc ->
-      ( { model | currentRoute = locationToRoute navLoc }, Cmd.none )
-
--- VIEW
-
-navLink : (Msg -> msg) -> Route -> List (Attribute msg) -> List (Html msg) -> Html msg
-navLink msgWrapper route attributes =
-  let
-    string = routeToString route
-    options = { stopPropagation = True, preventDefault = True }
-    visitAndDecode = Json.Decode.succeed << msgWrapper << SetRoute
-    on = onWithOptions "click" options (visitAndDecode route)
-  in a (href string :: on :: attributes)
+initialModel : Model
+initialModel =
+  { currentRoute = Nothing }
 
 -- FUNCTIONS
 
