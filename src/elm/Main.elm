@@ -11,6 +11,7 @@ import Html.Events exposing (onClick, onWithOptions, onSubmit)
 import Http
 import Components.FontAwesome exposing (faText)
 import Components.Html exposing (data, aria)
+import Views exposing (..)
 import Session exposing (Session)
 import Components.Flash as Flash
 import Navigation
@@ -21,13 +22,13 @@ import Json.Encode as JE
 import Store exposing (Store)
 import Models.Assemblage as Assemblage exposing (Assemblage)
 import Models.Assembly as Assembly exposing (Assembly)
-import Models.Tag as Tag exposing (Tag)
 import Models.File as File exposing (File)
 import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
 import Task
 import Jwt
 import Dict
 import Celeste exposing (apiUrl)
+import Messages exposing (..)
 
 main : Program Never Model Msg
 main =
@@ -59,18 +60,6 @@ init navLoc =
   in processLocation navLoc preModel
 
 -- UPDATE
-
-type Msg
-  = Noop
-  | SignIn
-  | SignInSucceed Session.User
-  | SignInFail Http.Error
-  | SignOut
-  | SessionMsg Session.Msg
-  | FlashMsg Flash.Msg
-  | SetRoute Routing.Route
-  | VisitLocation Navigation.Location
-  | StoreRecords Celeste.ResponseTuple
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -149,14 +138,6 @@ update msg model =
 
 -- VIEW
 
-navLink : Routing.Route -> List (Attribute Msg) -> List (Html Msg) -> Html Msg
-navLink route =
-  let
-    string = Routing.routeToString route
-    options = { stopPropagation = True, preventDefault = True }
-    on = onWithOptions "click" options (JD.succeed << SetRoute <| route)
-  in (a << (::) (href string) << (::) on)
-
 template : Model -> List (Html Msg)
 template { routing, store, session } =
   case routing.currentRoute of
@@ -177,16 +158,6 @@ template { routing, store, session } =
           [notFound]
     Nothing ->
       [notFound]
-
-root : Html msg
-root = text "Hi."
-
-notFound : Html msg
-notFound =
-  let
-    h = h1 [] [ text "Not found" ]
-    par = p [] [ text "Try again." ]
-  in div [] [ h, par ]
 
 newSessionView : Session -> List (Html Msg)
 newSessionView model =
@@ -301,7 +272,7 @@ assemblagesThroughAssemblies { id } { assemblies, assemblages } foreignKey furth
     |> List.filterMap (\id -> Dict.get id assemblages)
     |> List.filter (\a -> (.kind a) == assemblageKind)
 
-enumerateHuman : List (Html Msg) -> List (Html Msg)
+enumerateHuman : List (Html msg) -> List (Html msg)
 enumerateHuman list =
   case list of
     [] ->
@@ -311,7 +282,7 @@ enumerateHuman list =
     [head1, head2] ->
       [head1, text " and ", head2]
     head :: tail ->
-      [head, text ", "] ++ (enumerateHuman tail)
+      [head, text ", "] ++ enumerateHuman tail
 
 prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
 prependAndEnumerateLinks str =
@@ -341,8 +312,8 @@ personView assemblage store =
     ++ (assemblageTable "Compositions" compositions)
     ++ (assemblageTable "Reconstructions of other composers' works" reconstructions)
 
-compositionHeader : Assemblage -> Store -> Bool -> List (Html Msg)
-compositionHeader assemblage store h1Link =
+compositionHeader : Store -> Bool -> Assemblage -> List (Html Msg)
+compositionHeader store h1Link assemblage =
   let
     h1Contents =
       if h1Link then
@@ -366,23 +337,11 @@ compositionHeader assemblage store h1Link =
         [h4 [] (reconstructedBy reconstructors)]
   in [nameHeader] ++ composedByHeader ++ reconstructedByHeader
 
-tagsRow : List Tag -> List (Html Msg)
-tagsRow tags =
-  if List.isEmpty tags then
-    []
-  else
-    [ small []
-      (
-        text "tags: "
-        :: (List.map (\t -> span [ class "label label-default" ] [ text t.name ]) tags)
-      )
-    ]
-
 compositionView : Assemblage -> Store -> List (Html Msg)
 compositionView assemblage store =
   let
     header =
-      compositionHeader assemblage store False
+      compositionHeader store False assemblage
     tags = []
     recordings =
       assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Recorded Assemblage.Recording
@@ -400,7 +359,7 @@ recordingView assemblage store =
       assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Recorded Assemblage.Composition
     inheritedHeader =
       compositions
-        |> List.map (\c -> compositionHeader c store True)
+        |> List.map (compositionHeader store True)
         |> List.foldr (++) []
     recordingHeader =
       [ h4 [] [ text ("recording: " ++ assemblage.name) ] ]
