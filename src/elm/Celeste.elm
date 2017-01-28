@@ -25,17 +25,14 @@ type alias ResponseTuple =
 
 -- FUNCTIONS
 
-apiUrl : String -> String
-apiUrl = (++) "http://localhost:4000/api"
-
-route : Route -> String
-route route =
+route : String -> Route -> String
+route apiBase route =
   let
     rel =
       case route of
         Composers -> "/composers"
         Assemblage id -> "/assemblages/" ++ (toString id)
-  in apiUrl rel
+  in apiBase ++ rel
 
 decoder : Route -> JD.Decoder Response
 decoder route =

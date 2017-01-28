@@ -9,7 +9,7 @@ import Html exposing (Html, Attribute,
 import Html.Attributes exposing (class, id, type_, attribute, href, target, placeholder)
 import Html.Events exposing (onClick, onWithOptions, onSubmit)
 import Http
-import Components.FontAwesome exposing (faText)
+import Components.FontAwesome exposing (fa, faText)
 import Components.Html exposing (data, aria)
 import Views exposing (..)
 import Session exposing (Session)
@@ -27,7 +27,7 @@ import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
 import Task
 import Jwt
 import Dict
-import Celeste exposing (apiUrl)
+import Celeste
 import Messages exposing (..)
 
 main : Program Never Model Msg
@@ -45,7 +45,9 @@ type alias Model =
   { routing : Routing.Model
   , flash : Flash.Model
   , session : Session.Model
+  , server : String
   , store : Store.Model
+  , playlist : List File
   }
 
 init : Navigation.Location -> ( Model, Cmd Msg )
@@ -55,7 +57,9 @@ init navLoc =
       { routing = Routing.initialModel
       , session = Session.initialModel
       , flash = Flash.initialModel
+      , server = "http://localhost:4000/api"
       , store = Store.initialModel
+      , playlist = []
       }
   in processLocation navLoc preModel
 
@@ -69,9 +73,10 @@ update msg model =
 
     SignIn ->
       let
+        apiBase = model.server
         signIn { username, password } =
           let
-            url = apiUrl "/session"
+            url = apiBase ++ "/session"
             sessionObject =
               JE.object
                 [ ("username", JE.string username)
@@ -363,7 +368,10 @@ recordingView assemblage store =
         |> List.foldr (++) []
     recordingHeader =
       [ h4 [] [ text ("recording: " ++ assemblage.name) ] ]
-    files = List.filterMap (\id -> Dict.get id store.files) assemblage.fileIds
+    files =
+      assemblage.fileIds
+        |> List.filterMap (\id -> Dict.get id store.files)
+        |> List.sortBy .name
   in inheritedHeader ++ recordingHeader ++ (fileTable files)
 
 view : Model -> Html Msg
@@ -382,7 +390,7 @@ view model =
           ( span [ class "sr-only" ] [ text "Toggle navigation" ] :: threeBars )
         , navLink Routing.Root [ class "navbar-brand" ] (faText "music" "Celeste")
         ]
-    leftNavbar =
+    leftNav =
       case model.session.user of
         Just _ ->
           [ ul [ class "nav navbar-nav" ]
@@ -408,22 +416,36 @@ view model =
           li []
             [ navLink Routing.NewSession [] (faText "sign-in" "Sign In")
             ]
-    rightNavbar =
+    rightNav =
       [ ul [ class "nav navbar-nav navbar-right" ] [ sessionNav ] ]
-  in
-    div []
-      [ nav [ class "navbar navbar-default" ]
+    navbar =
+      nav [ class "navbar navbar-default" ]
         [ div [ class "container" ]
           [ navbarHeader
-          , div [ class "collapse navbar-collapse" ] (leftNavbar ++ rightNavbar)
+          , div [ class "collapse navbar-collapse" ] (leftNav ++ rightNav)
           ]
         ]
-        , div [ class "container" ]
-          (
-            (Flash.view model.flash)
-            ++ [ main_ [ attribute "role" "main" ] (template model) ]
-          )
-      ]
+    mainContainer =
+      div [ class "container" ]
+        ( Flash.view model.flash
+        ++ [ main_ [ attribute "role" "main" ] (template model) ]
+        )
+    player =
+      case model.playlist of
+        [] ->
+          []
+        playlist ->
+          [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
+            [ div [ class "container" ]
+              [ ul [ class "nav navbar-nav navbar-right" ]
+                [ li [] [ a [ href "#" ] [ fa "backward" ] ]
+                , li [] [ a [ href "#" ] [ fa "play" ] ]
+                , li [] [ a [ href "#" ] [ fa "forward" ] ]
+                ]
+              ]
+            ]
+          ]
+  in div [] ([ navbar, mainContainer ] ++ player)
 
 -- FUNCTIONS
 
@@ -437,7 +459,7 @@ handleCelesteResponse response =
     _ ->
       Noop
 
-fetch : Celeste.Route -> String -> Cmd Msg
+fetch : String -> Celeste.Route -> String -> Cmd Msg
 fetch = Store.fetch handleCelesteResponse
 
 processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
@@ -452,8 +474,8 @@ processLocation navLoc model =
     fetchCmd =
       case route of
         Just (Routing.Assemblage id) ->
-          (authorized << fetch) (Celeste.Assemblage id)
+          (authorized << fetch model.server) (Celeste.Assemblage id)
         Just Routing.Composers ->
-          (authorized << fetch) Celeste.Composers
+          (authorized << fetch model.server) Celeste.Composers
         _ -> Cmd.none
   in ( newModel, fetchCmd )

@@ -13,7 +13,7 @@ import Messages
 -- VIEW
 
 root : Html msg
-root = text "Hi."
+root = h1 [] [ text "Hi." ]
 
 notFound : Html msg
 notFound =

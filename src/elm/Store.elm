@@ -38,7 +38,6 @@ initialModel =
 
 -- FUNCTIONS
 
-fetch : (Result Jwt.JwtError Celeste.Response -> msg) -> Celeste.Route -> String -> Cmd msg
-fetch handler route jwt =
-  let decoder = Celeste.decoder route
-  in Jwt.send handler (Jwt.get jwt (Celeste.route route) decoder)
+fetch : (Result Jwt.JwtError Celeste.Response -> msg) -> String -> Celeste.Route -> String -> Cmd msg
+fetch handler apiBase route jwt =
+  Jwt.send handler (Jwt.get jwt (Celeste.route apiBase route) (Celeste.decoder route))
