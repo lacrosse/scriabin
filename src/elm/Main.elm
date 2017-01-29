@@ -120,6 +120,9 @@ update msg model =
     SessionMsg msg ->
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
+    PlayerMsg msg ->
+      let (updatedPlayer, cmd) = Player.update msg model.player
+      in ( { model | player = updatedPlayer }, Cmd.map PlayerMsg cmd )
 
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )
@@ -145,14 +148,14 @@ update msg model =
     UpdatePlayer files file ->
       let
         (previous, next) = splitList files file
-        oldPlaylist = model.player.playlist
-        newPlaylist =
-          { oldPlaylist
+        oldPlayer = model.player
+        newPlayer =
+          { oldPlayer
           | previous = Array.fromList previous
           , current = Player.Playing file 0
           , next = Array.fromList next
           }
-      in ( { model | player = { playlist = newPlaylist } }, Cmd.none )
+      in ( { model | player = newPlayer }, Cmd.none )
 
 -- VIEW
 
@@ -387,41 +390,56 @@ recordingView assemblage store =
         |> List.sortBy .name
   in inheritedHeader ++ recordingHeader ++ (fileTable files)
 
-player : Player.Model -> List (Html msg)
-player { playlist } =
+player : Player.Model -> List (Html Msg)
+player player =
   let
+    toHumanTime time =
+      let pad = String.padLeft 2 '0' << toString
+      in pad (time // 60) ++ ":" ++ pad (rem time 60)
+    describe text time =
+      text ++ " (" ++ toHumanTime time ++ ")"
     description string =
       ul [ class "nav navbar-nav navbar-left" ]
         [ p [ class "navbar-text" ] [ text string ]
         ]
     toggleNav toggles =
       ul [ class "nav navbar-nav navbar-right" ] toggles
-    navbar text toggles =
+    navbar text time toggles =
       nav [ class "navbar navbar-default navbar-fixed-bottom" ]
         [ div [ class "container" ]
-          [ description text
+          [ description (describe text time)
           , toggleNav toggles
           ]
         ]
-    toggle icon = li [] [ a [ href "#" ] [ fa icon ] ]
+    toggle icon msg =
+      li []
+        [ a
+          [ href "#"
+          , onWithOptions
+            "click"
+            { stopPropagation = True, preventDefault = True }
+            (JD.succeed << PlayerMsg <| msg)
+          ]
+          [ fa icon ]
+        ]
   in
-    case playlist.current of
-      Player.Stopped ->
+    case player.current of
+      Player.Stopped _ ->
         []
       Player.Playing { name } time ->
-        [ navbar name
-          [ toggle "backward"
-          , toggle "stop"
-          , toggle "pause"
-          , toggle "forward"
+        [ navbar name time
+          [ toggle "backward" Player.Stop
+          , toggle "stop" Player.Stop
+          , toggle "pause" Player.Pause
+          , toggle "forward" Player.Stop
           ]
         ]
       Player.Paused { name } time ->
-        [ navbar name
-          [ toggle "backward"
-          , toggle "stop"
-          , toggle "play"
-          , toggle "forward"
+        [ navbar name time
+          [ toggle "backward" Player.Stop
+          , toggle "stop" Player.Stop
+          , toggle "play" Player.Play
+          , toggle "forward" Player.Stop
           ]
         ]
 
