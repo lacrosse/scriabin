@@ -6,6 +6,7 @@ import Components.Flash as Flash
 import Routing
 import Navigation
 import Celeste
+import Models.File exposing (File)
 
 type Msg
   = Noop
@@ -18,3 +19,4 @@ type Msg
   | SetRoute Routing.Route
   | VisitLocation Navigation.Location
   | StoreRecords Celeste.ResponseTuple
+  | UpdatePlayer (List File) File

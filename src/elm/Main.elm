@@ -17,6 +17,7 @@ import Components.Flash as Flash
 import Navigation
 import Routing
 import Regex
+import Array
 import Json.Decode as JD
 import Json.Encode as JE
 import Store exposing (Store)
@@ -24,6 +25,7 @@ import Models.Assemblage as Assemblage exposing (Assemblage)
 import Models.Assembly as Assembly exposing (Assembly)
 import Models.File as File exposing (File)
 import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
+import Components.Player as Player
 import Task
 import Jwt
 import Dict
@@ -47,7 +49,7 @@ type alias Model =
   , session : Session.Model
   , server : String
   , store : Store.Model
-  , playlist : List File
+  , player : Player.Model
   }
 
 init : Navigation.Location -> ( Model, Cmd Msg )
@@ -59,7 +61,7 @@ init navLoc =
       , flash = Flash.initialModel
       , server = "http://localhost:4000/api"
       , store = Store.initialModel
-      , playlist = []
+      , player = Player.initialModel
       }
   in processLocation navLoc preModel
 
@@ -140,6 +142,17 @@ update msg model =
         newFiles = Dict.union filesDict old.files
         new = { old | assemblages = newAssemblages, assemblies = newAssemblies, files = newFiles }
       in ( { model | store = new }, Cmd.none )
+    UpdatePlayer files file ->
+      let
+        (previous, next) = splitList files file
+        oldPlaylist = model.player.playlist
+        newPlaylist =
+          { oldPlaylist
+          | previous = Array.fromList previous
+          , current = Player.Playing file 0
+          , next = Array.fromList next
+          }
+      in ( { model | player = { playlist = newPlaylist } }, Cmd.none )
 
 -- VIEW
 
@@ -214,10 +227,6 @@ wikipediaPath name =
     articleName = wikify name
   in base ++ articleName
 
-fileRowView : File -> Html Msg
-fileRowView { name } =
-  p [] [ text name ]
-
 compositionRowView : Assemblage -> Html Msg
 compositionRowView a =
   p [] [ assemblageLink a ]
@@ -257,9 +266,13 @@ assemblageTable name assemblages =
       ]
     ]
 
+fileRowView : Msg -> File -> Html Msg
+fileRowView msg { name } =
+  p [] [ a [ onClick msg ] [ text name ] ]
+
 fileTable : List File -> List (Html Msg)
-fileTable =
-  List.map fileRowView
+fileTable files =
+  List.map (\file -> fileRowView (UpdatePlayer files file) file) files
 
 assemblagesThroughAssemblies
   : Assemblage
@@ -374,6 +387,44 @@ recordingView assemblage store =
         |> List.sortBy .name
   in inheritedHeader ++ recordingHeader ++ (fileTable files)
 
+player : Player.Model -> List (Html msg)
+player { playlist } =
+  let
+    description string =
+      ul [ class "nav navbar-nav navbar-left" ]
+        [ p [ class "navbar-text" ] [ text string ]
+        ]
+    toggleNav toggles =
+      ul [ class "nav navbar-nav navbar-right" ] toggles
+    navbar text toggles =
+      nav [ class "navbar navbar-default navbar-fixed-bottom" ]
+        [ div [ class "container" ]
+          [ description text
+          , toggleNav toggles
+          ]
+        ]
+    toggle icon = li [] [ a [ href "#" ] [ fa icon ] ]
+  in
+    case playlist.current of
+      Player.Stopped ->
+        []
+      Player.Playing { name } time ->
+        [ navbar name
+          [ toggle "backward"
+          , toggle "stop"
+          , toggle "pause"
+          , toggle "forward"
+          ]
+        ]
+      Player.Paused { name } time ->
+        [ navbar name
+          [ toggle "backward"
+          , toggle "stop"
+          , toggle "play"
+          , toggle "forward"
+          ]
+        ]
+
 view : Model -> Html Msg
 view model =
   let
@@ -430,24 +481,21 @@ view model =
         ( Flash.view model.flash
         ++ [ main_ [ attribute "role" "main" ] (template model) ]
         )
-    player =
-      case model.playlist of
-        [] ->
-          []
-        playlist ->
-          [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
-            [ div [ class "container" ]
-              [ ul [ class "nav navbar-nav navbar-right" ]
-                [ li [] [ a [ href "#" ] [ fa "backward" ] ]
-                , li [] [ a [ href "#" ] [ fa "play" ] ]
-                , li [] [ a [ href "#" ] [ fa "forward" ] ]
-                ]
-              ]
-            ]
-          ]
-  in div [] ([ navbar, mainContainer ] ++ player)
+  in div [] ([ navbar, mainContainer ] ++ player model.player)
 
 -- FUNCTIONS
+
+splitList : List a -> a -> (List a, List a)
+splitList list separator =
+  case list of
+    [] ->
+      ([], [])
+    hd :: tl ->
+      if hd == separator then
+        ([], tl)
+      else
+        let (left, right) = splitList list separator
+        in (hd :: left, right)
 
 handleCelesteResponse : Result Jwt.JwtError Celeste.Response -> Msg
 handleCelesteResponse response =
