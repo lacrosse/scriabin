@@ -1,6 +1,5 @@
 module Components.Player exposing (..)
 
-import Array exposing (Array)
 import Models.File exposing (File)
 
 -- MODEL
@@ -11,16 +10,16 @@ type Current
   | Playing File Int
 
 type alias Model =
-  { previous : Array File
+  { previous : List File
   , current : Current
-  , next : Array File
+  , next : List File
   }
 
 initialModel : Model
 initialModel =
-  { previous = Array.empty
+  { previous = []
   , current = Stopped Nothing
-  , next = Array.empty
+  , next = []
   }
 
 -- UPDATE
@@ -29,6 +28,7 @@ type Msg
   = Stop
   | Pause
   | Play
+  | Backward
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -59,3 +59,37 @@ update msg model =
           ( { model | current = Playing file time }, Cmd.none )
         _ ->
           ( model, Cmd.none )
+    Backward ->
+      case model.current of
+        Stopped maybeFile ->
+          case maybeFile of
+            Just file ->
+              let
+                newNext = file :: model.next
+                (newCurrentFile, newPrevious) =
+                  case model.previous of
+                    hd :: tl -> (Just hd, tl)
+                    [] ->       (Nothing, [])
+              in ( { model | current = Stopped newCurrentFile, previous = newPrevious, next = newNext }, Cmd.none )
+            Nothing ->
+              ( model, Cmd.none )
+        Paused file time ->
+          if time > 5 then
+            ( { model | current = Paused file 0 }, Cmd.none )
+          else
+            case model.previous of
+              file :: newPrevious ->
+                let newNext = file :: model.next
+                in ( { model | current = Paused file time, previous = newPrevious, next = newNext }, Cmd.none )
+              [] ->
+                ( model, Cmd.none )
+        Playing file time ->
+          if time > 5 then
+            ( { model | current = Playing file 0 }, Cmd.none )
+          else
+            case model.previous of
+              file :: newPrevious ->
+                let newNext = file :: model.next
+                in ( { model | current = Playing file time, previous = newPrevious, next = newNext }, Cmd.none )
+              [] ->
+                ( model, Cmd.none )

@@ -17,7 +17,6 @@ import Components.Flash as Flash
 import Navigation
 import Routing
 import Regex
-import Array
 import Json.Decode as JD
 import Json.Encode as JE
 import Store exposing (Store)
@@ -151,9 +150,9 @@ update msg model =
         oldPlayer = model.player
         newPlayer =
           { oldPlayer
-          | previous = Array.fromList previous
+          | previous = previous
           , current = Player.Playing file 0
-          , next = Array.fromList next
+          , next = next
           }
       in ( { model | player = newPlayer }, Cmd.none )
 
@@ -414,12 +413,7 @@ player player =
     toggle icon msg =
       li []
         [ a
-          [ href "#"
-          , onWithOptions
-            "click"
-            { stopPropagation = True, preventDefault = True }
-            (JD.succeed << PlayerMsg <| msg)
-          ]
+          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed << PlayerMsg <| msg) ]
           [ fa icon ]
         ]
   in
@@ -428,7 +422,7 @@ player player =
         []
       Player.Playing { name } time ->
         [ navbar name time
-          [ toggle "backward" Player.Stop
+          [ toggle "backward" Player.Backward
           , toggle "stop" Player.Stop
           , toggle "pause" Player.Pause
           , toggle "forward" Player.Stop
@@ -436,7 +430,7 @@ player player =
         ]
       Player.Paused { name } time ->
         [ navbar name time
-          [ toggle "backward" Player.Stop
+          [ toggle "backward" Player.Backward
           , toggle "stop" Player.Stop
           , toggle "play" Player.Play
           , toggle "forward" Player.Stop
