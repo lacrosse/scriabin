@@ -29,6 +29,7 @@ type Msg
   | Pause
   | Play
   | Backward
+  | Forward
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -63,6 +64,7 @@ update msg model =
       case model.current of
         Stopped maybeFile ->
           case maybeFile of
+            Nothing -> ( model, Cmd.none )
             Just file ->
               let
                 newNext = file :: model.next
@@ -71,25 +73,41 @@ update msg model =
                     hd :: tl -> (Just hd, tl)
                     [] ->       (Nothing, [])
               in ( { model | current = Stopped newCurrentFile, previous = newPrevious, next = newNext }, Cmd.none )
-            Nothing ->
-              ( model, Cmd.none )
         Paused file time ->
           if time > 5 then
             ( { model | current = Paused file 0 }, Cmd.none )
           else
             case model.previous of
+              [] -> ( model, Cmd.none )
               file :: newPrevious ->
-                let newNext = file :: model.next
-                in ( { model | current = Paused file time, previous = newPrevious, next = newNext }, Cmd.none )
-              [] ->
-                ( model, Cmd.none )
+                ( { model | current = Paused file 0, previous = newPrevious, next = file :: model.next }, Cmd.none )
         Playing file time ->
           if time > 5 then
             ( { model | current = Playing file 0 }, Cmd.none )
           else
             case model.previous of
+              [] -> ( model, Cmd.none )
               file :: newPrevious ->
-                let newNext = file :: model.next
-                in ( { model | current = Playing file time, previous = newPrevious, next = newNext }, Cmd.none )
-              [] ->
-                ( model, Cmd.none )
+                ( { model | current = Playing file 0, previous = newPrevious, next = file :: model.next }, Cmd.none )
+    Forward ->
+      case model.current of
+        Stopped maybeFile ->
+          case maybeFile of
+            Nothing -> ( model, Cmd.none )
+            Just file ->
+              let
+                (newCurrentFile, newNext) =
+                  case model.next of
+                    hd :: tl -> (Just hd, tl)
+                    [] ->       (Nothing, [])
+              in ( { model | current = Stopped newCurrentFile, previous = file :: model.previous, next = newNext }, Cmd.none )
+        Paused file _ ->
+          case model.next of
+            [] -> ( model, Cmd.none )
+            file :: newNext ->
+              ( { model | current = Paused file 0, previous = file :: model.previous, next = newNext }, Cmd.none )
+        Playing file _ ->
+          case model.next of
+            [] -> ( model, Cmd.none )
+            file :: newNext ->
+              ( { model | current = Playing file 0, previous = file :: model.previous, next = newNext }, Cmd.none )

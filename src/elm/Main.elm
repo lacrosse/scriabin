@@ -425,7 +425,7 @@ player player =
           [ toggle "backward" Player.Backward
           , toggle "stop" Player.Stop
           , toggle "pause" Player.Pause
-          , toggle "forward" Player.Stop
+          , toggle "forward" Player.Forward
           ]
         ]
       Player.Paused { name } time ->
@@ -433,7 +433,7 @@ player player =
           [ toggle "backward" Player.Backward
           , toggle "stop" Player.Stop
           , toggle "play" Player.Play
-          , toggle "forward" Player.Stop
+          , toggle "forward" Player.Forward
           ]
         ]
 
