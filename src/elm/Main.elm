@@ -144,17 +144,6 @@ update msg model =
         newFiles = Dict.union filesDict old.files
         new = { old | assemblages = newAssemblages, assemblies = newAssemblies, files = newFiles }
       in ( { model | store = new }, Cmd.none )
-    UpdatePlayer files file ->
-      let
-        (previous, next) = splitList files file
-        oldPlayer = model.player
-        newPlayer =
-          { oldPlayer
-          | previous = previous
-          , current = Player.Playing file 0
-          , next = next
-          }
-      in ( { model | player = newPlayer }, Cmd.none )
 
 -- VIEW
 
@@ -274,7 +263,7 @@ fileRowView msg { name } =
 
 fileTable : List File -> List (Html Msg)
 fileTable files =
-  List.map (\file -> fileRowView (UpdatePlayer files file) file) files
+  List.map (\file -> fileRowView (PlayerMsg <| Player.Update files file) file) files
 
 assemblagesThroughAssemblies
   : Assemblage
@@ -496,18 +485,6 @@ view model =
   in div [] ([ navbar, mainContainer ] ++ player model.player)
 
 -- FUNCTIONS
-
-splitList : List a -> a -> (List a, List a)
-splitList list separator =
-  case list of
-    [] ->
-      ([], [])
-    hd :: tl ->
-      if hd == separator then
-        ([], tl)
-      else
-        let (left, right) = splitList list separator
-        in (hd :: left, right)
 
 handleCelesteResponse : Result Jwt.JwtError Celeste.Response -> Msg
 handleCelesteResponse response =

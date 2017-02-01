@@ -30,6 +30,7 @@ type Msg
   | Play
   | Backward
   | Forward
+  | Update (List File) File
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -111,3 +112,20 @@ update msg model =
             [] -> ( model, Cmd.none )
             file :: newNext ->
               ( { model | current = Playing file 0, previous = file :: model.previous, next = newNext }, Cmd.none )
+    Update files file ->
+      let (previous, next) = splitList files file
+      in ({ model | previous = previous, current = Playing file 0, next = next }, Cmd.none)
+
+-- FUNCTIONS
+
+splitList : List a -> a -> (List a, List a)
+splitList list separator =
+  case list of
+    [] ->
+      ([], [])
+    hd :: tl ->
+      if hd == separator then
+        ([], tl)
+      else
+        let (left, right) = splitList list separator
+        in (hd :: left, right)
