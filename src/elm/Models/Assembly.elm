@@ -16,14 +16,6 @@ type alias Assembly =
   , childAssemblageId : Int
   }
 
-dummyComposed : Assembly
-dummyComposed =
-  Assembly 1 Composed 2
-
-dummyRecorded : Assembly
-dummyRecorded =
-  Assembly 2 Recorded 3
-
 -- FUNCTIONS
 
 parseKind : String -> Kind

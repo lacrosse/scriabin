@@ -258,8 +258,11 @@ assemblageTable name assemblages =
     ]
 
 fileRowView : Msg -> File -> Html Msg
-fileRowView msg { name } =
-  p [] [ a [ onClick msg ] [ text name ] ]
+fileRowView msg { title } =
+  p []
+    [ a [ href "", onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg) ]
+      [ text title ]
+    ]
 
 fileTable : List File -> List (Html Msg)
 fileTable files =
@@ -381,49 +384,46 @@ recordingView assemblage store =
 player : Player.Model -> List (Html Msg)
 player player =
   let
-    toHumanTime time =
-      let pad = String.padLeft 2 '0' << toString
-      in pad (time // 60) ++ ":" ++ pad (rem time 60)
-    describe text time =
-      text ++ " (" ++ toHumanTime time ++ ")"
-    description string =
+    pad = String.padLeft 2 '0' << toString
+    toHumanTime time = pad (time // 60) ++ ":" ++ pad (rem time 60)
+    describe txt time = txt ++ " (" ++ toHumanTime time ++ ")"
+    description txt time =
       ul [ class "nav navbar-nav navbar-left" ]
-        [ p [ class "navbar-text" ] [ text string ]
+        [ p [ class "navbar-text" ] [ text (describe txt time) ]
         ]
-    toggleNav toggles =
-      ul [ class "nav navbar-nav navbar-right" ] toggles
-    navbar text time toggles =
+    controlNav controls =
+      ul [ class "nav navbar-nav navbar-right" ] controls
+    navbar txt time controls =
       nav [ class "navbar navbar-default navbar-fixed-bottom" ]
         [ div [ class "container" ]
-          [ description (describe text time)
-          , toggleNav toggles
+          [ description txt time
+          , controlNav controls
           ]
         ]
-    toggle icon msg =
+    control icon msg =
       li []
         [ a
-          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed << PlayerMsg <| msg) ]
+          [ href ""
+          , onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed << PlayerMsg <| msg) ]
           [ fa icon ]
         ]
+    backwardControl previous =
+      (if List.isEmpty previous then [] else [control "backward" Player.Backward])
+    stopControl =
+      [control "stop" Player.Stop]
+    playPauseControl state =
+      case state of
+        Player.Playing -> [control "pause" Player.Pause]
+        Player.Paused -> [control "play" Player.Play]
+    forwardControl next =
+      (if List.isEmpty next then [] else [control "forward" Player.Forward])
   in
-    case player.current of
-      Player.Stopped _ ->
+    case player of
+      Player.Stopped ->
         []
-      Player.Playing { name } time ->
-        [ navbar name time
-          [ toggle "backward" Player.Backward
-          , toggle "stop" Player.Stop
-          , toggle "pause" Player.Pause
-          , toggle "forward" Player.Forward
-          ]
-        ]
-      Player.Paused { name } time ->
-        [ navbar name time
-          [ toggle "backward" Player.Backward
-          , toggle "stop" Player.Stop
-          , toggle "play" Player.Play
-          , toggle "forward" Player.Forward
-          ]
+      Player.Working state time { title } previous next ->
+        [ navbar title time
+          (backwardControl previous ++ stopControl ++ playPauseControl state ++ forwardControl next)
         ]
 
 view : Model -> Html Msg

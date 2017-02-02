@@ -4,23 +4,16 @@ import Models.File exposing (File)
 
 -- MODEL
 
-type Current
-  = Stopped (Maybe File)
-  | Paused File Int
-  | Playing File Int
+type WorkingState
+  = Playing
+  | Paused
 
-type alias Model =
-  { previous : List File
-  , current : Current
-  , next : List File
-  }
+type Model
+  = Stopped
+  | Working WorkingState Int File (List File) (List File)
 
 initialModel : Model
-initialModel =
-  { previous = []
-  , current = Stopped Nothing
-  , next = []
-  }
+initialModel = Stopped
 
 -- UPDATE
 
@@ -36,85 +29,45 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
     Stop ->
-      case model.current of
-        Playing file _ ->
-          ( { model | current = Stopped (Just file) }, Cmd.none )
-        Paused file _ ->
-          ( { model | current = Stopped (Just file) }, Cmd.none )
-        _ ->
-          ( model, Cmd.none )
+      (Stopped, Cmd.none)
     Pause ->
-      case model.current of
-        Playing file time ->
-          ( { model | current = Paused file time }, Cmd.none )
+      case model of
+        Working Playing time file previous next ->
+          (Working Paused time file previous next, Cmd.none)
         _ ->
-          ( model, Cmd.none )
+          (model, Cmd.none)
     Play ->
-      case model.current of
-        Stopped maybeFile ->
-          case maybeFile of
-            Just file ->
-              ( { model | current = Playing file 0 }, Cmd.none )
-            Nothing ->
-              ( model, Cmd.none )
-        Paused file time ->
-          ( { model | current = Playing file time }, Cmd.none )
+      case model of
+        Working Paused time file previous next ->
+          (Working Playing time file previous next, Cmd.none)
         _ ->
-          ( model, Cmd.none )
+          (model, Cmd.none)
     Backward ->
-      case model.current of
-        Stopped maybeFile ->
-          case maybeFile of
-            Nothing -> ( model, Cmd.none )
-            Just file ->
-              let
-                newNext = file :: model.next
-                (newCurrentFile, newPrevious) =
-                  case model.previous of
-                    hd :: tl -> (Just hd, tl)
-                    [] ->       (Nothing, [])
-              in ( { model | current = Stopped newCurrentFile, previous = newPrevious, next = newNext }, Cmd.none )
-        Paused file time ->
+      case model of
+        Working state time file previous next ->
           if time > 5 then
-            ( { model | current = Paused file 0 }, Cmd.none )
+            (Working state 0 file previous next, Cmd.none)
           else
-            case model.previous of
-              [] -> ( model, Cmd.none )
+            case previous of
+              [] ->
+                (Working state 0 file previous next, Cmd.none)
               file :: newPrevious ->
-                ( { model | current = Paused file 0, previous = newPrevious, next = file :: model.next }, Cmd.none )
-        Playing file time ->
-          if time > 5 then
-            ( { model | current = Playing file 0 }, Cmd.none )
-          else
-            case model.previous of
-              [] -> ( model, Cmd.none )
-              file :: newPrevious ->
-                ( { model | current = Playing file 0, previous = newPrevious, next = file :: model.next }, Cmd.none )
+                (Working state 0 file newPrevious (file :: next), Cmd.none)
+        Stopped ->
+          (model, Cmd.none)
     Forward ->
-      case model.current of
-        Stopped maybeFile ->
-          case maybeFile of
-            Nothing -> ( model, Cmd.none )
-            Just file ->
-              let
-                (newCurrentFile, newNext) =
-                  case model.next of
-                    hd :: tl -> (Just hd, tl)
-                    [] ->       (Nothing, [])
-              in ( { model | current = Stopped newCurrentFile, previous = file :: model.previous, next = newNext }, Cmd.none )
-        Paused file _ ->
-          case model.next of
-            [] -> ( model, Cmd.none )
+      case model of
+        Working state time file previous next ->
+          case next of
+            [] ->
+              (model, Cmd.none)
             file :: newNext ->
-              ( { model | current = Paused file 0, previous = file :: model.previous, next = newNext }, Cmd.none )
-        Playing file _ ->
-          case model.next of
-            [] -> ( model, Cmd.none )
-            file :: newNext ->
-              ( { model | current = Playing file 0, previous = file :: model.previous, next = newNext }, Cmd.none )
+              (Working state 0 file (file :: previous) newNext, Cmd.none)
+        Stopped ->
+          (model, Cmd.none)
     Update files file ->
       let (previous, next) = splitList files file
-      in ({ model | previous = previous, current = Playing file 0, next = next }, Cmd.none)
+      in (Working Playing 0 file previous next, Cmd.none)
 
 -- FUNCTIONS
 
@@ -127,5 +80,5 @@ splitList list separator =
       if hd == separator then
         ([], tl)
       else
-        let (left, right) = splitList list separator
+        let (left, right) = splitList tl separator
         in (hd :: left, right)
