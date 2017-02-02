@@ -258,10 +258,10 @@ assemblageTable name assemblages =
     ]
 
 fileRowView : Msg -> File -> Html Msg
-fileRowView msg { title } =
+fileRowView msg { name } =
   p []
     [ a [ href "", onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg) ]
-      [ text title ]
+      [ text name ]
     ]
 
 fileTable : List File -> List (Html Msg)
@@ -387,42 +387,38 @@ player player =
     pad = String.padLeft 2 '0' << toString
     toHumanTime time = pad (time // 60) ++ ":" ++ pad (rem time 60)
     describe txt time = txt ++ " (" ++ toHumanTime time ++ ")"
-    description txt time =
+    description txt time controls =
       ul [ class "nav navbar-nav navbar-left" ]
-        [ p [ class "navbar-text" ] [ text (describe txt time) ]
-        ]
-    controlNav controls =
-      ul [ class "nav navbar-nav navbar-right" ] controls
+        (controls ++ [ p [ class "navbar-text" ] [ text (describe txt time) ] ])
     navbar txt time controls =
       nav [ class "navbar navbar-default navbar-fixed-bottom" ]
         [ div [ class "container" ]
-          [ description txt time
-          , controlNav controls
+          [ description txt time controls
           ]
         ]
-    control icon msg =
-      li []
+    control icon msg disabled_ =
+      li (if disabled_ then [ class "disabled" ] else [])
         [ a
-          [ href ""
-          , onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed << PlayerMsg <| msg) ]
+          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed << PlayerMsg <| msg) ]
           [ fa icon ]
         ]
     backwardControl previous =
-      (if List.isEmpty previous then [] else [control "backward" Player.Backward])
+      [control "backward" Player.Backward (List.isEmpty previous)]
     stopControl =
-      [control "stop" Player.Stop]
+      [control "stop" Player.Stop False]
     playPauseControl state =
-      case state of
-        Player.Playing -> [control "pause" Player.Pause]
-        Player.Paused -> [control "play" Player.Play]
+      [ case state of
+        Player.Playing -> control "pause" Player.Pause False
+        Player.Paused -> control "play" Player.Play False
+      ]
     forwardControl next =
-      (if List.isEmpty next then [] else [control "forward" Player.Forward])
+      [control "forward" Player.Forward (List.isEmpty next)]
   in
     case player of
       Player.Stopped ->
         []
-      Player.Working state time { title } previous next ->
-        [ navbar title time
+      Player.Working state time { name } previous next ->
+        [ navbar name time
           (backwardControl previous ++ stopControl ++ playPauseControl state ++ forwardControl next)
         ]
 
