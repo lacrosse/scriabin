@@ -1,15 +1,14 @@
-module Main exposing (..)
+module Main exposing (main)
 
 import Html exposing (Html, Attribute,
                       div, main_, nav,
                       text, a, span, button, h1, h3, h4,
-                      p, i, small, ul, li,
-                      table, thead, tbody, tr, th, td,
-                      form, input, label)
-import Html.Attributes exposing (class, id, type_, attribute, href, target, placeholder)
-import Html.Events exposing (onClick, onWithOptions, onSubmit)
+                      p, ul, li,
+                      table, thead, tbody, tr, th, td)
+import Html.Attributes exposing (class, type_, attribute, href, target, placeholder)
+import Html.Events exposing (onClick, onWithOptions)
 import Http
-import Components.FontAwesome exposing (fa, faText)
+import Components.FontAwesome exposing (faText)
 import Components.Html exposing (data, aria)
 import Views exposing (..)
 import Session exposing (Session)
@@ -151,7 +150,7 @@ template : Model -> List (Html Msg)
 template { routing, store, session } =
   case routing.currentRoute of
     Just Routing.Root ->
-      [root]
+      root
     Just Routing.NewSession ->
       newSessionView session
     Just Routing.Composers ->
@@ -381,47 +380,6 @@ recordingView assemblage store =
         |> List.sortBy .name
   in inheritedHeader ++ recordingHeader ++ (fileTable files)
 
-player : Player.Model -> List (Html Msg)
-player player =
-  let
-    pad = String.padLeft 2 '0' << toString
-    toHumanTime time = pad (time // 60) ++ ":" ++ pad (rem time 60)
-    describe txt time = txt ++ " (" ++ toHumanTime time ++ ")"
-    description txt time controls =
-      ul [ class "nav navbar-nav navbar-left" ]
-        (controls ++ [ p [ class "navbar-text" ] [ text (describe txt time) ] ])
-    navbar txt time controls =
-      nav [ class "navbar navbar-default navbar-fixed-bottom" ]
-        [ div [ class "container" ]
-          [ description txt time controls
-          ]
-        ]
-    control icon msg disabled_ =
-      li (if disabled_ then [ class "disabled" ] else [])
-        [ a
-          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed << PlayerMsg <| msg) ]
-          [ fa icon ]
-        ]
-    backwardControl previous =
-      [control "backward" Player.Backward (List.isEmpty previous)]
-    stopControl =
-      [control "stop" Player.Stop False]
-    playPauseControl state =
-      [ case state of
-        Player.Playing -> control "pause" Player.Pause False
-        Player.Paused -> control "play" Player.Play False
-      ]
-    forwardControl next =
-      [control "forward" Player.Forward (List.isEmpty next)]
-  in
-    case player of
-      Player.Stopped ->
-        []
-      Player.Working state time { name } previous next ->
-        [ navbar name time
-          (backwardControl previous ++ stopControl ++ playPauseControl state ++ forwardControl next)
-        ]
-
 view : Model -> Html Msg
 view model =
   let
@@ -438,15 +396,14 @@ view model =
           ( span [ class "sr-only" ] [ text "Toggle navigation" ] :: threeBars )
         , navLink Routing.Root [ class "navbar-brand" ] (faText "music" "Celeste")
         ]
-    leftNav =
+    authenticatedItems =
       case model.session.user of
         Just _ ->
-          [ ul [ class "nav navbar-nav" ]
-            [ li [] [ navLink Routing.Composers [] [ text "Composers" ] ]
-            ]
+          [ li [] [ navLink Routing.Composers [] [ text "Composers" ] ]
           ]
         Nothing ->
           []
+    leftNav = [ ul [ class "nav navbar-nav" ] authenticatedItems ]
     sessionNav =
       case model.session.user of
         Just user ->
@@ -478,7 +435,8 @@ view model =
         ( Flash.view model.flash
         ++ [ main_ [ attribute "role" "main" ] (template model) ]
         )
-  in div [] ([ navbar, mainContainer ] ++ player model.player)
+    player = List.map (Html.map PlayerMsg) (Player.view model.player)
+  in div [] (navbar :: mainContainer :: player)
 
 -- FUNCTIONS
 

@@ -1,5 +1,11 @@
 module Components.Player exposing (..)
 
+import Html exposing (Html, ul, p, text, li, a, div, nav)
+import Html.Attributes exposing (class)
+import Html.Events exposing (onWithOptions)
+import Json.Decode as JD
+
+import Components.FontAwesome exposing (fa)
 import Models.File exposing (File)
 
 -- MODEL
@@ -68,6 +74,47 @@ update msg model =
     Update files file ->
       let (previous, next) = splitList files file
       in (Working Playing 0 file previous next, Cmd.none)
+
+-- VIEW
+
+view : Model -> List (Html Msg)
+view model =
+  let
+    pad = String.padLeft 2 '0' << toString
+    toHumanTime time = pad (time // 60) ++ ":" ++ pad (rem time 60)
+    describe txt time = txt ++ " (" ++ toHumanTime time ++ ")"
+    description txt time controls =
+      ul [ class "nav navbar-nav navbar-left" ]
+        (controls ++ [ p [ class "navbar-text" ] [ text (describe txt time) ] ])
+    control icon msg disabled_ =
+      li (if disabled_ then [ class "disabled" ] else [])
+        [ a
+          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg) ]
+          [ fa icon ]
+        ]
+    backwardControl previous =
+      [control "backward" Backward (List.isEmpty previous)]
+    stopControl =
+      [control "stop" Stop False]
+    playPauseControl state =
+      [ case state of
+        Playing -> control "pause" Pause False
+        Paused -> control "play" Play False
+      ]
+    forwardControl next =
+      [control "forward" Forward (List.isEmpty next)]
+  in
+    case model of
+      Stopped ->
+        []
+      Working state time { name } previous next ->
+        [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
+          [ div [ class "container" ]
+            [ description name time
+              (backwardControl previous ++ stopControl ++ playPauseControl state ++ forwardControl next)
+            ]
+          ]
+        ]
 
 -- FUNCTIONS
 

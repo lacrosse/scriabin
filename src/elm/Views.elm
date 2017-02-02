@@ -12,8 +12,13 @@ import Messages
 
 -- VIEW
 
-root : Html msg
-root = h1 [] [ text "Hi." ]
+root : List (Html msg)
+root =
+  [ h1 [] [ text "Welcome!" ]
+  , p []
+    [ text "I am Scriabin, a web client for Celeste. I will be your personal attendant for today. There is no reason to panic."
+    ]
+  ]
 
 notFound : Html msg
 notFound =
