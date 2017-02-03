@@ -1,4 +1,4 @@
-module Main exposing (main)
+port module Main exposing (main)
 
 import Html exposing (Html, Attribute,
                       div, main_, nav,
@@ -65,12 +65,35 @@ init navLoc =
 
 -- UPDATE
 
+port webAudioControl : JE.Value -> Cmd msg
+
+syncWebAudio : Player.Model -> String -> Cmd Msg
+syncWebAudio player server =
+  let
+    jvalue =
+      case player of
+        Player.Working state time { sha256 } _ _ ->
+          let
+            url = server ++ "/files/" ++ sha256
+            action =
+              case state of
+                Player.Playing -> "play"
+                Player.Paused -> "pause"
+          in
+            JE.object
+              [ ("action", JE.string action)
+              , ("url", JE.string url)
+              , ("time", JE.int time)
+              ]
+
+        Player.Stopped ->
+          JE.object [("action", JE.string "stop")]
+  in webAudioControl jvalue
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
-    Noop ->
-      ( model, Cmd.none )
-
+    Noop -> (model, Cmd.none)
     SignIn ->
       let
         apiBase = model.server
@@ -119,8 +142,10 @@ update msg model =
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     PlayerMsg msg ->
-      let (updatedPlayer, cmd) = Player.update msg model.player
-      in ( { model | player = updatedPlayer }, Cmd.map PlayerMsg cmd )
+      let
+        (updatedPlayer, cmd) = Player.update msg model.player
+        batchCmd = Cmd.batch [Cmd.map PlayerMsg cmd, syncWebAudio updatedPlayer model.server]
+      in ({ model | player = updatedPlayer }, batchCmd)
 
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )
