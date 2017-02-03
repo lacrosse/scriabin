@@ -20,3 +20,4 @@ type Msg
   | VisitLocation Navigation.Location
   | StoreRecords Celeste.ResponseTuple
   | PlayerMsg Player.Msg
+  | MutedPlayerMsg Player.Msg

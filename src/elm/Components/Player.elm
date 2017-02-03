@@ -30,6 +30,7 @@ type Msg
   | Backward
   | Forward
   | Update (List File) File
+  | Sync JD.Value
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -74,6 +75,8 @@ update msg model =
     Update files file ->
       let (previous, next) = splitList files file
       in (Working Playing 0 file previous next, Cmd.none)
+    Sync jvalue ->
+      (model, Cmd.none)
 
 -- VIEW
 

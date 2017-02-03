@@ -3,30 +3,33 @@ require('../../node_modules/bootstrap-sass/assets/javascripts/bootstrap');
 
 var Scriabin = require('../elm/Main');
 
-window.scriabin = Scriabin.Main.embed(document.getElementById('app'));
+window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'));
 
-window.scriabin.ports.webAudioControl.subscribe(function (object) {
+window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {
-    loadSound(object.url);
+    loadSound(object.url, object.time);
   }
 });
 
 AudioContext = window.AudioContext || window.webkitAudioContext;
-var audioContext = new AudioContext();
 
-window.loadSound = function (url) {
+window.audioContext = new AudioContext();
+
+loadSound = function (url, time) {
+  if (window.audioSource) {
+    window.audioSource.stop();
+  }
+
   var request = new XMLHttpRequest();
+
   request.open('GET', url, true);
   request.responseType = 'arraybuffer';
-
-  var buffer;
-
   request.onload = function () {
-    audioContext.decodeAudioData(request.response, function (buffer) {
-      window.audioSource = audioContext.createBufferSource();
+    window.audioContext.decodeAudioData(request.response, function (buffer) {
+      window.audioSource = window.audioContext.createBufferSource();
       window.audioSource.buffer = buffer;
-      window.audioSource.connect(audioContext.destination);
-      window.audioSource.start(0);
+      window.audioSource.connect(window.audioContext.destination);
+      window.audioSource.start(time);
     });
   };
 

@@ -36,7 +36,7 @@ main =
     { init = init
     , view = view
     , update = update
-    , subscriptions = always Sub.none
+    , subscriptions = subscriptions
     }
 
 -- MODEL
@@ -146,6 +146,9 @@ update msg model =
         (updatedPlayer, cmd) = Player.update msg model.player
         batchCmd = Cmd.batch [Cmd.map PlayerMsg cmd, syncWebAudio updatedPlayer model.server]
       in ({ model | player = updatedPlayer }, batchCmd)
+    MutedPlayerMsg msg ->
+      let (updatedPlayer, cmd) = Player.update msg model.player
+      in ({ model | player = updatedPlayer }, Cmd.map PlayerMsg cmd)
 
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )
@@ -168,6 +171,14 @@ update msg model =
         newFiles = Dict.union filesDict old.files
         new = { old | assemblages = newAssemblages, assemblies = newAssemblies, files = newFiles }
       in ( { model | store = new }, Cmd.none )
+
+-- SUB
+
+port syncPlayer : (JD.Value -> msg) -> Sub msg
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+  syncPlayer (MutedPlayerMsg << Player.Sync)
 
 -- VIEW
 
@@ -198,20 +209,10 @@ newSessionView model =
     form =
       [ h1 [] [ text "Sign In" ]
       , horizontalForm SignIn
-        [ inputFormGroup
-          "user"
-          "username"
-          "Username"
-          "text"
-          model.wannabe.username
+        [ inputFormGroup "user" "username" "Username" "text" model.wannabe.username
           (SessionMsg << Session.UpdateWannabeUsername)
           [ placeholder "seanbooth" ]
-        , inputFormGroup
-          "user"
-          "password"
-          "Password"
-          "password"
-          model.wannabe.password
+        , inputFormGroup "user" "password" "Password" "password" model.wannabe.password
           (SessionMsg << Session.UpdateWannabePassword)
           [ placeholder "6IE.CR" ]
         , div [ class "form-group" ]
