@@ -7,7 +7,7 @@ window.scriabin = Scriabin.Main.embed(document.getElementById('app'));
 
 window.scriabin.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {
-    console.log('Playing ' + object.url);
+    loadSound(object.url);
   }
 });
 

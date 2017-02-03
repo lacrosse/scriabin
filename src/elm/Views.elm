@@ -1,7 +1,7 @@
 module Views exposing (root, notFound,
                        tagLabel, tagsRow, navLink)
 
-import Html exposing (Html, Attribute, span, text, small, h1, p, div, a)
+import Html exposing (Html, Attribute, span, text, small, h1, p, div, a, code)
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
@@ -16,8 +16,11 @@ root : List (Html msg)
 root =
   [ h1 [] [ text "Welcome!" ]
   , p []
-    [ text "I am Scriabin, a web client for Celeste. I will be your personal attendant for today. There is no reason to panic."
+    [ text "I am Scriabin, a web client for Celeste. You are connected to "
+    , code [] [ text "http://localhost:4000" ]
+    , text ". I will be your personal attendant for today."
     ]
+  , p [] [ text "There is no reason to panic." ]
   ]
 
 notFound : Html msg
