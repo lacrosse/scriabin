@@ -8,26 +8,27 @@ import Html exposing (Html, Attribute,
 import Html.Attributes exposing (class, type_, attribute, href, target, placeholder)
 import Html.Events exposing (onClick, onWithOptions)
 import Http
-import Components.FontAwesome exposing (faText)
-import Components.Html exposing (data, aria)
-import Views exposing (..)
-import Session exposing (Session)
-import Components.Flash as Flash
 import Navigation
-import Routing
 import Regex
-import Json.Decode as JD
-import Json.Encode as JE
-import Store exposing (Store)
-import Models.Assemblage as Assemblage exposing (Assemblage)
-import Models.Assembly as Assembly exposing (Assembly)
-import Models.File as File exposing (File)
-import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
-import Components.Player as Player
 import Task
 import Jwt
 import Dict
+import Json.Decode as JD
+import Json.Encode as JE
+
+import Components.Html exposing (data, aria)
+import Components.FontAwesome exposing (faText)
+import Components.Flash as Flash
+import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
+import Components.Player as Player
+import Models.Assemblage as Assemblage exposing (Assemblage)
+import Models.Assembly as Assembly exposing (Assembly)
+import Models.File as File exposing (File)
+import Routing
 import Celeste
+import Views exposing (..)
+import Session exposing (Session)
+import Store exposing (Store)
 import Messages exposing (..)
 
 main : Program Never Model Msg
@@ -72,7 +73,7 @@ syncWebAudio player server =
   let
     jvalue =
       case player of
-        Player.Working state time { sha256 } _ _ ->
+        Player.Working state time { id, sha256 } _ _ ->
           let
             url = server ++ "/files/" ++ sha256
             action =
@@ -83,7 +84,8 @@ syncWebAudio player server =
             JE.object
               [ ("action", JE.string action)
               , ("url", JE.string url)
-              , ("time", JE.int time)
+              , ("time", JE.float time)
+              , ("id", JE.int id)
               ]
 
         Player.Stopped ->
@@ -174,11 +176,11 @@ update msg model =
 
 -- SUB
 
-port syncPlayer : (JD.Value -> msg) -> Sub msg
+port webAudio : (JD.Value -> msg) -> Sub msg
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-  syncPlayer (MutedPlayerMsg << Player.Sync)
+  webAudio (MutedPlayerMsg << Player.Sync)
 
 -- VIEW
 

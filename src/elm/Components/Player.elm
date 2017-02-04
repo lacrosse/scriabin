@@ -16,7 +16,7 @@ type WorkingState
 
 type Model
   = Stopped
-  | Working WorkingState Int File (List File) (List File)
+  | Working WorkingState Float File (List File) (List File)
 
 initialModel : Model
 initialModel = Stopped
@@ -76,7 +76,33 @@ update msg model =
       let (previous, next) = splitList files file
       in (Working Playing 0 file previous next, Cmd.none)
     Sync jvalue ->
-      (model, Cmd.none)
+      let
+        newModel =
+          case JD.decodeValue (JD.field "state" JD.string) jvalue of
+            Ok "paused" ->
+              case model of
+                Working _ _ file previous next ->
+                  let
+                    time =
+                      case JD.decodeValue (JD.field "offset" JD.float) jvalue of
+                        Ok val -> val
+                        Err err -> 0
+                  in Working Paused time file previous next
+                _ -> model
+            Ok "playing" ->
+              case model of
+                Working Playing _ file previous next ->
+                  let
+                    time =
+                      case JD.decodeValue (JD.field "offset" JD.float) jvalue of
+                        Ok val -> val
+                        Err err -> 0
+                  in Working Playing time file previous next
+                _ ->
+                  model
+            _ ->
+              model
+      in (newModel, Cmd.none)
 
 -- VIEW
 
@@ -84,8 +110,8 @@ view : Model -> List (Html Msg)
 view model =
   let
     pad = String.padLeft 2 '0' << toString
-    toHumanTime time = pad (time // 60) ++ ":" ++ pad (rem time 60)
-    describe txt time = txt ++ " (" ++ toHumanTime time ++ ")"
+    toHumanTime secs = pad (secs // 60) ++ ":" ++ pad (rem secs 60)
+    describe txt time = txt ++ " (" ++ (toHumanTime << floor) time ++ ")"
     description txt time controls =
       ul [ class "nav navbar-nav navbar-left" ]
         (controls ++ [ p [ class "navbar-text" ] [ text (describe txt time) ] ])
