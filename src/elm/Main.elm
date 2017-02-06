@@ -24,6 +24,7 @@ import Components.Player as Player
 import Models.Assemblage as Assemblage exposing (Assemblage)
 import Models.Assembly as Assembly exposing (Assembly)
 import Models.File as File exposing (File)
+import Models.Tag as Tag exposing (Tag)
 import Routing
 import Celeste
 import Views exposing (..)
@@ -134,19 +135,9 @@ update msg model =
         (updatedFlash, flashCmd) = Flash.update Flash.Flush newModel.flash
         cmd = Cmd.batch [fetchCmd, flashCmd]
       in ( { newModel | flash = updatedFlash }, cmd )
-    StoreRecords (assemblages, assemblies, files) ->
-      let
-        old = model.store
-        dictifyById = Dict.fromList << List.map (\a -> (a.id, a))
-        dictifyByComposite = Dict.fromList << List.map (\a -> ((a.assemblageId, a.childAssemblageId), a))
-        assemblagesDict = dictifyById assemblages
-        assembliesDict = dictifyByComposite assemblies
-        filesDict = dictifyById files
-        newAssemblages = Dict.union assemblagesDict old.assemblages
-        newAssemblies = Dict.union assembliesDict old.assemblies
-        newFiles = Dict.union filesDict old.files
-        new = { old | assemblages = newAssemblages, assemblies = newAssemblies, files = newFiles }
-      in ( { model | store = new }, Cmd.none )
+    StoreRecords tuple ->
+      let (updatedStore, cmd) = Store.update tuple model.store
+      in ({ model | store = updatedStore }, cmd)
 
 -- SUB
 

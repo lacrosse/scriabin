@@ -1,9 +1,20 @@
 module Models.Tag exposing (..)
 
+import Json.Decode as JD
+
 -- MODEL
 
 type alias Tag =
   { id : Int
-  , assemblageId : Int
-  , name : String
+  , key : String
+  , value : String
   }
+
+-- DECODERS
+
+jsonDecoder : JD.Decoder Tag
+jsonDecoder =
+  JD.map3 Tag
+    (JD.field "id" JD.int)
+    (JD.field "key" JD.string)
+    (JD.field "value" JD.string)

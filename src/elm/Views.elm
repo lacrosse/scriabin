@@ -39,8 +39,8 @@ navLink route =
   in (a << (::) (href string) << (::) on)
 
 tagLabel : Tag -> Html msg
-tagLabel { name } =
-  span [ class "label label-default" ] [ text name ]
+tagLabel { value } =
+  span [ class "label label-default" ] [ text value ]
 
 tagsRow : List Tag -> List (Html msg)
 tagsRow tags =

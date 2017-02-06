@@ -4,6 +4,7 @@ import Json.Decode as JD
 import Models.Assemblage
 import Models.Assembly
 import Models.File
+import Models.Tag
 
 -- MODEL
 
@@ -18,10 +19,15 @@ type Response
     , List Models.Assemblage.Assemblage
     , List Models.Assembly.Assembly
     , List Models.File.File
+    , List Models.Tag.Tag
     )
 
 type alias ResponseTuple =
-  (List Models.Assemblage.Assemblage, List Models.Assembly.Assembly, List Models.File.File)
+  ( List Models.Assemblage.Assemblage
+  , List Models.Assembly.Assembly
+  , List Models.File.File
+  , List Models.Tag.Tag
+  )
 
 -- FUNCTIONS
 
@@ -42,17 +48,18 @@ decoder route =
     Assemblage id ->
       let
         tupleDecoder =
-          JD.map4 (,,,)
+          JD.map5 (,,,,)
             (JD.field "assemblage" Models.Assemblage.jsonDecoder)
             (JD.field "assemblages" (JD.list Models.Assemblage.jsonDecoder))
             (JD.field "assemblies" (JD.list Models.Assembly.jsonDecoder))
             (JD.field "files" (JD.list Models.File.jsonDecoder))
+            (JD.field "tags" (JD.list Models.Tag.jsonDecoder))
       in JD.map AssemblageResponse tupleDecoder
 
 responseToTuple : Response -> ResponseTuple
 responseToTuple resp =
   case resp of
-    AssemblageResponse (assemblage, assemblages, assemblies, files) ->
-      (assemblage :: assemblages, assemblies, files)
+    AssemblageResponse (assemblage, assemblages, assemblies, files, tags) ->
+      (assemblage :: assemblages, assemblies, files, tags)
     ComposersResponse assemblages ->
-      (assemblages, [], [])
+      (assemblages, [], [], [])
