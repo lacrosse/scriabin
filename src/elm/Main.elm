@@ -118,7 +118,13 @@ update msg model =
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     PlayerMsg msg ->
-      let (updatedPlayer, cmd) = Player.update msg model.player model.server
+      let
+        (updatedPlayer, cmd) =
+          case model.session.user of
+            Just { jwt } ->
+              Player.update msg model.player (model.server, jwt)
+            Nothing ->
+              (model.player, Cmd.none)
       in ({ model | player = updatedPlayer }, Cmd.map PlayerMsg cmd)
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )

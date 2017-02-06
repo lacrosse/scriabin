@@ -35,77 +35,77 @@ type Msg
 
 port webAudioControl : JE.Value -> Cmd msg
 
-syncWebAudio : Model -> String -> Cmd Msg
-syncWebAudio player server =
+syncWebAudio : Model -> ( String, String ) -> Cmd Msg
+syncWebAudio player serverTuple =
   let
-    toJvalue player server =
+    toJvalue player serverTuple =
       case player of
         Working state time file _ next ->
           case state of
             Playing ->
               let
                 default =
-                  [("action", JE.string "play"), ("time", JE.float time)] ++ fileTuples file server
+                  [("action", JE.string "play"), ("time", JE.float time)] ++ fileTuples file serverTuple
                 tail =
                   case List.head next of
                     Just nextFile ->
-                      [("next", JE.object (fileTuples nextFile server))]
+                      [("next", JE.object (fileTuples nextFile serverTuple))]
                     Nothing ->
                       []
               in JE.object (default ++ tail)
             Paused ->
-              JE.object ([("action", JE.string "pause"), ("time", JE.float time)] ++ fileTuples file server)
+              JE.object ([("action", JE.string "pause"), ("time", JE.float time)] ++ fileTuples file serverTuple)
         Stopped ->
           JE.object [("action", JE.string "stop")]
-  in webAudioControl (toJvalue player server)
+  in webAudioControl (toJvalue player serverTuple)
 
-commandNature : Model -> String -> ( Model, Cmd Msg )
-commandNature model server =
-  (model, syncWebAudio model server)
+commandNature : Model -> ( String, String ) -> ( Model, Cmd Msg )
+commandNature model serverTuple =
+  (model, syncWebAudio model serverTuple)
 
-update : Msg -> Model -> String -> ( Model, Cmd Msg )
-update msg model server =
+update : Msg -> Model -> ( String, String ) -> ( Model, Cmd Msg )
+update msg model (server, token) =
   case msg of
     Stop ->
-      commandNature Stopped server
+      commandNature Stopped (server, token)
     Pause ->
       case model of
         Working Playing time file previous next ->
-          commandNature (Working Paused time file previous next) server
+          commandNature (Working Paused time file previous next) (server, token)
         _ ->
-          commandNature model server
+          commandNature model (server, token)
     Play ->
       case model of
         Working Paused time file previous next ->
-          commandNature (Working Playing time file previous next) server
+          commandNature (Working Playing time file previous next) (server, token)
         _ ->
-          commandNature model server
+          commandNature model (server, token)
     Backward ->
       case model of
         Working state time file previous next ->
           if time > 5 then
-            commandNature (Working state 0 file previous next) server
+            commandNature (Working state 0 file previous next) (server, token)
           else
             case previous of
               [] ->
-                commandNature (Working state 0 file previous next) server
+                commandNature (Working state 0 file previous next) (server, token)
               previousFile :: newPrevious ->
-                commandNature (Working state 0 previousFile newPrevious (file :: next)) server
+                commandNature (Working state 0 previousFile newPrevious (file :: next)) (server, token)
         Stopped ->
-          commandNature model server
+          commandNature model (server, token)
     Forward ->
       case model of
         Working state time file previous next ->
           case next of
             [] ->
-              commandNature model server
+              commandNature model (server, token)
             nextFile :: newNext ->
-              commandNature (Working state 0 nextFile (file :: previous) newNext) server
+              commandNature (Working state 0 nextFile (file :: previous) newNext) (server, token)
         Stopped ->
-          commandNature model server
+          commandNature model (server, token)
     Update files file ->
       let (previous, next) = splitList files file
-      in commandNature (Working Playing 0 file previous next) server
+      in commandNature (Working Playing 0 file previous next) (server, token)
     Sync jvalue ->
       let
         time =
@@ -132,7 +132,7 @@ update msg model server =
                             Just nextFile ->
                               let
                                 jvalue =
-                                  JE.object (("action", JE.string "preload") :: fileTuples nextFile server)
+                                  JE.object (("action", JE.string "preload") :: fileTuples nextFile (server, token))
                               in webAudioControl jvalue
                             Nothing ->
                               Cmd.none
@@ -148,7 +148,7 @@ update msg model server =
               Working _ _ file previous next ->
                 case next of
                   nextFile :: newNext ->
-                    commandNature (Working Playing 0 nextFile (file :: previous) newNext) server
+                    commandNature (Working Playing 0 nextFile (file :: previous) newNext) (server, token)
                   _ ->
                     (Stopped, Cmd.none)
               Stopped ->
@@ -214,8 +214,12 @@ view model =
 fileUrl : String -> String -> String
 fileUrl server sha256 = server ++ "/files/" ++ sha256
 
-fileTuples : File -> String -> List ( String, JE.Value )
-fileTuples file server = [("url", JE.string (fileUrl server file.sha256)), ("id", JE.int file.id)]
+fileTuples : File -> ( String, String ) -> List ( String, JE.Value )
+fileTuples file (server, token) =
+  [ ("url", JE.string (fileUrl server file.sha256))
+  , ("id", JE.int file.id)
+  , ("token", JE.string token)
+  ]
 
 splitList : List a -> a -> (List a, List a)
 splitList list separator =

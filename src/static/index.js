@@ -10,10 +10,10 @@ var PRELOAD_THRESHOLD = 5;
 
 window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {
-    window.player.play(object.url, object.time, object.id);
+    window.player.play(object.url, object.token, object.time, object.id);
     window.player.next = object.next;
   } else if (object.action == 'pause') {
-    window.player.pause(object.url, object.id);
+    window.player.pause(object.url, object.token, object.id);
   } else if (object.action == 'stop') {
     window.player.stop();
   } else {
@@ -47,7 +47,7 @@ window.player = {
       });
 
       if (this.next && this.willEndAt - currentTime <= PRELOAD_THRESHOLD) {
-        this.load(this.next.url, this.next.id);
+        this.load(this.next.url, this.next.token, this.next.id);
         this.next = null;
       }
 
@@ -94,7 +94,7 @@ window.player = {
     this.willEndAt = null;
   },
 
-  load: function (url, id, then) {
+  load: function (url, token, id, then) {
     then = then || function () {};
 
     if (this.buffers[id]) {
@@ -104,6 +104,7 @@ window.player = {
       var _this = this;
 
       request.open('GET', url, true);
+      request.setRequestHeader('Authorization', 'Bearer ' + token);
       request.responseType = 'arraybuffer';
       request.onload = function () {
         audioContext.decodeAudioData(request.response, function (buffer) {
@@ -121,10 +122,10 @@ window.player = {
     this.destroySource();
   },
 
-  pause: function (url, id) {
+  pause: function (url, token, id) {
     this.offset = audioContext.currentTime - this.startedAt;
     this.destroySource();
-    this.load(url, id);
+    this.load(url, token, id);
 
     this.sync({
       state: 'paused',
@@ -132,9 +133,9 @@ window.player = {
     });
   },
 
-  play: function (url, time, id) {
+  play: function (url, token, time, id) {
     var _this = this;
     this.destroySource();
-    this.load(url, id, function () { _this.connectAndStart(id, time); });
+    this.load(url, token, id, function () { _this.connectAndStart(id, time); });
   },
 };
