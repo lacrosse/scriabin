@@ -1,7 +1,7 @@
 port module Components.Player exposing (..)
 
 import Html exposing (Html, ul, p, text, li, a, div, nav)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, accesskey)
 import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
 import Json.Encode as JE
@@ -174,23 +174,24 @@ view model =
     description txt time controls =
       ul [ class "nav navbar-nav navbar-left" ]
         (controls ++ [ p [ class "navbar-text" ] [ text (describe txt time) ] ])
-    control icon msg disabled_ =
+    control icon msg key disabled_ =
       li (if disabled_ then [ class "disabled" ] else [])
         [ a
-          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg) ]
+          [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg)
+          , accesskey key
+          ]
           [ fa icon ]
         ]
     backwardControl previous =
-      [control "backward" Backward (List.isEmpty previous)]
+      control "backward" Backward 'z' (List.isEmpty previous)
     stopControl =
-      [control "stop" Stop False]
+      control "stop" Stop 'x' False
     playPauseControl state =
-      [ case state of
-        Playing -> control "pause" Pause False
-        Paused -> control "play" Play False
-      ]
+      case state of
+        Playing -> control "pause" Pause 'c' False
+        Paused -> control "play" Play 'c' False
     forwardControl next =
-      [control "forward" Forward (List.isEmpty next)]
+      control "forward" Forward 'v' (List.isEmpty next)
   in
     case model of
       Stopped ->
@@ -199,7 +200,11 @@ view model =
         [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
           [ div [ class "container" ]
             [ description name time
-              (backwardControl previous ++ stopControl ++ playPauseControl state ++ forwardControl next)
+              [ backwardControl previous
+              , stopControl
+              , playPauseControl state
+              , forwardControl next
+              ]
             ]
           ]
         ]
