@@ -223,7 +223,7 @@ assemblageView assemblage store =
     Assemblage.Composition ->
       compositionView assemblage store
     Assemblage.Recording ->
-      recordingView assemblage store
+      performanceView assemblage store
     Assemblage.General ->
       personView assemblage store
 
@@ -269,8 +269,8 @@ assemblagesThroughAssemblies { id } { assemblies, assemblages } foreignKey furth
     |> Dict.filter (\_ a -> (foreignKey a) == id && (.kind a) == assemblyKind)
     |> Dict.values
     |> List.map furtherForeignKey
-    |> List.filterMap (\id -> Dict.get id assemblages)
-    |> List.filter (\a -> (.kind a) == assemblageKind)
+    |> List.filterMap (flip Dict.get assemblages)
+    |> List.filter ((==) assemblageKind << .kind)
 
 enumerateHuman : List (Html msg) -> List (Html msg)
 enumerateHuman list =
@@ -288,9 +288,6 @@ prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
 prependAndEnumerateLinks str =
   (::) (text (str ++ " ")) << enumerateHuman << (List.map assemblageLink)
 
-composedBy : List Assemblage -> List (Html Msg)
-composedBy = prependAndEnumerateLinks "composed by"
-
 reconstructedBy : List Assemblage -> List (Html Msg)
 reconstructedBy = prependAndEnumerateLinks "reconstructed by"
 
@@ -301,33 +298,61 @@ personView assemblage store =
       [ h1 [] [ text assemblage.name ]
       , p [] [ a [ href (wikipediaPath assemblage.name), target "_blank" ] [ text "Wikipedia" ] ]
       ]
-    files = List.filterMap (\id -> Dict.get id store.files) assemblage.fileIds
-    compositions =
+    files = List.filterMap (flip Dict.get store.files) assemblage.fileIds
+    shuffledPerformances =
+      assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Performed Assemblage.Recording
+    performances =
+      List.sortBy .name shuffledPerformances
+    shuffledCompositions =
       assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Composed Assemblage.Composition
+    compositions =
+      List.sortBy .name shuffledCompositions
     reconstructions =
       assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Reconstructed Assemblage.Composition
   in
     header
     ++ (fileTable files)
+    ++ (assemblageTable "Performances" performances)
     ++ (assemblageTable "Compositions" compositions)
     ++ (assemblageTable "Reconstructions of other composers' works" reconstructions)
 
-compositionHeader : Store -> Bool -> Assemblage -> List (Html Msg)
+compositionHeader : Store -> Bool -> Assemblage -> ( List (Html Msg), List Tag )
 compositionHeader store h1Link assemblage =
   let
-    h1Contents =
-      if h1Link then
-        [ assemblageLink assemblage ]
+    allTags =
+      List.filterMap (flip Dict.get store.tags) assemblage.tagIds
+    (creationDateTags, tags_) = List.partition ((==) "creation_date" << .key) allTags
+    (tonalityTags, tags) = List.partition ((==) "tonality" << .key) tags_
+    tonality =
+      if List.isEmpty tonalityTags then
+        []
       else
-        [ text (Assemblage.fullName assemblage) ]
-    nameHeader = h1 [] h1Contents
+        [ text " "
+        , span [ class "text-muted" ] (text "in " :: enumerateHuman (List.map (text << .value) tonalityTags))
+        ]
+    compositionName =
+      if h1Link then
+        navLink (Routing.Assemblage assemblage.id) [] [ text (Assemblage.fullName assemblage) ]
+      else
+        text (Assemblage.fullName assemblage)
+    nameHeader = h1 [] (compositionName :: tonality)
     composers =
       assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Composed Assemblage.Person
+    creationDate =
+      if List.isEmpty creationDateTags then
+        []
+      else
+        text " in " :: enumerateHuman (List.map (text << .value) creationDateTags)
     composedByHeader =
       if List.isEmpty composers then
         []
       else
-        [h3 [] (composedBy composers)]
+        [ h3 []
+          ([ text "composed " ]
+          ++ prependAndEnumerateLinks "by" composers
+          ++ creationDate
+          )
+        ]
     reconstructors =
       assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Reconstructed Assemblage.Person
     reconstructedByHeader =
@@ -335,39 +360,46 @@ compositionHeader store h1Link assemblage =
         []
       else
         [h4 [] (reconstructedBy reconstructors)]
-  in [nameHeader] ++ composedByHeader ++ reconstructedByHeader
+  in ([nameHeader] ++ composedByHeader ++ reconstructedByHeader, tags)
 
 compositionView : Assemblage -> Store -> List (Html Msg)
 compositionView assemblage store =
   let
-    header =
-      compositionHeader store False assemblage
-    tags = []
+    (header, tags) = compositionHeader store False assemblage
     recordings =
       assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Recorded Assemblage.Recording
     compositionFiles = []
   in
     header
     ++ (tagsRow tags)
-    ++ (assemblageTable "Recordings" recordings)
+    ++ (assemblageTable "Performances" recordings)
     ++ (fileTable compositionFiles)
 
-recordingView : Assemblage -> Store -> List (Html Msg)
-recordingView assemblage store =
+performanceView : Assemblage -> Store -> List (Html Msg)
+performanceView assemblage store =
   let
     compositions =
       assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Recorded Assemblage.Composition
     inheritedHeader =
       compositions
-        |> List.map (compositionHeader store True)
+        |> List.map (Tuple.first << compositionHeader store True)
         |> List.foldr (++) []
-    recordingHeader =
-      [ h4 [] [ text ("recording: " ++ assemblage.name) ] ]
+    performers =
+      assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Performed Assemblage.Person
+    mainPerformanceHeader =
+      if List.isEmpty performers then
+        []
+      else
+        [h4 [] ([ text "performed " ] ++ prependAndEnumerateLinks "by" performers)]
+    performanceHeader =
+      mainPerformanceHeader ++
+      [ h4 [] [ text assemblage.name ]
+      ]
     files =
       assemblage.fileIds
-        |> List.filterMap (\id -> Dict.get id store.files)
+        |> List.filterMap (flip Dict.get store.files)
         |> List.sortBy .name
-  in inheritedHeader ++ recordingHeader ++ (fileTable files)
+  in inheritedHeader ++ performanceHeader ++ (fileTable files)
 
 view : Model -> Html Msg
 view model =

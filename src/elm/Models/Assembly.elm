@@ -8,6 +8,7 @@ type Kind
   = Composed
   | Recorded
   | Reconstructed
+  | Performed
   | General
 
 type alias Assembly =
@@ -23,6 +24,7 @@ parseKind string =
   case string of
     "composed" -> Composed
     "recorded" -> Recorded
+    "performed" -> Performed
     "reconstructed" -> Reconstructed
     _ -> General
 
