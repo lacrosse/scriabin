@@ -12,12 +12,12 @@ import Messages
 
 -- VIEW
 
-root : List (Html msg)
-root =
+root : String -> List (Html msg)
+root server =
   [ h1 [] [ text "Welcome!" ]
   , p []
     [ text "I am Scriabin, a web client for Celeste. You are connected to "
-    , code [] [ text "http://localhost:4000" ]
+    , code [] [ text server ]
     , text ". I will be your personal attendant for today."
     ]
   , p [] [ text "There is no reason to panic." ]

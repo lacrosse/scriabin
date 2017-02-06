@@ -1,10 +1,11 @@
 module Main exposing (main)
 
 import Html exposing (Html, Attribute,
-                      div, main_, nav,
+                      div, main_, nav, footer,
                       text, a, span, button, h1, h3, h4,
                       p, ul, li,
-                      table, thead, tbody, tr, th, td)
+                      table, thead, tbody, tr, th, td,
+                      hr)
 import Html.Attributes exposing (class, type_, attribute, href, target, placeholder)
 import Html.Events exposing (onClick, onWithOptions)
 import Http
@@ -150,10 +151,10 @@ subscriptions model =
 -- VIEW
 
 template : Model -> List (Html Msg)
-template { routing, store, session } =
+template { routing, store, session, server } =
   case routing.currentRoute of
     Just Routing.Root ->
-      root
+      root server
     Just Routing.NewSession ->
       newSessionView session
     Just Routing.Composers ->
@@ -239,12 +240,7 @@ assemblageTable name assemblages =
     []
   else
     [ table [ class "table" ]
-      [ thead []
-        [ tr []
-          [ th []
-            [ text name ]
-          ]
-        ]
+      [ thead [] [ tr [] [ th [] [ text name ] ] ]
       , tbody [] (List.map assemblageRow assemblages)
       ]
     ]
@@ -428,8 +424,13 @@ view model =
         ( Flash.view model.flash
         ++ [ main_ [ attribute "role" "main" ] (template model) ]
         )
+    footer_ =
+      footer [ class "container" ]
+        [ hr [] []
+        , text ""
+        ]
     player = List.map (Html.map PlayerMsg) (Player.view model.player)
-  in div [] (navbar :: mainContainer :: player)
+  in div [] (navbar :: mainContainer :: footer_ :: player)
 
 -- FUNCTIONS
 
