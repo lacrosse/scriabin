@@ -67,7 +67,7 @@ update : Msg -> Model -> String -> ( Model, Cmd Msg )
 update msg model server =
   case msg of
     Stop ->
-      (Stopped, Cmd.none)
+      commandNature Stopped server
     Pause ->
       case model of
         Working Playing time file previous next ->
@@ -89,8 +89,8 @@ update msg model server =
             case previous of
               [] ->
                 commandNature (Working state 0 file previous next) server
-              file :: newPrevious ->
-                commandNature (Working state 0 file newPrevious (file :: next)) server
+              previousFile :: newPrevious ->
+                commandNature (Working state 0 previousFile newPrevious (file :: next)) server
         Stopped ->
           commandNature model server
     Forward ->
@@ -99,8 +99,8 @@ update msg model server =
           case next of
             [] ->
               commandNature model server
-            file :: newNext ->
-              commandNature (Working state 0 file (file :: previous) newNext) server
+            nextFile :: newNext ->
+              commandNature (Working state 0 nextFile (file :: previous) newNext) server
         Stopped ->
           commandNature model server
     Update files file ->

@@ -9,7 +9,6 @@ var DURATION_TRACKING_FREQUENCY = 500;
 var PRELOAD_THRESHOLD = 5;
 
 window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
-  console.log('Nature!!!', object);
   if (object.action == 'play') {
     window.player.play(object.url, object.time, object.id);
     window.player.next = object.next;
