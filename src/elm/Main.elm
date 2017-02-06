@@ -1,4 +1,4 @@
-port module Main exposing (main)
+module Main exposing (main)
 
 import Html exposing (Html, Attribute,
                       div, main_, nav,
@@ -66,32 +66,6 @@ init navLoc =
 
 -- UPDATE
 
-port webAudioControl : JE.Value -> Cmd msg
-
-syncWebAudio : Player.Model -> String -> Cmd Msg
-syncWebAudio player server =
-  let
-    jvalue =
-      case player of
-        Player.Working state time { id, sha256 } _ _ ->
-          let
-            url = server ++ "/files/" ++ sha256
-            action =
-              case state of
-                Player.Playing -> "play"
-                Player.Paused -> "pause"
-          in
-            JE.object
-              [ ("action", JE.string action)
-              , ("url", JE.string url)
-              , ("time", JE.float time)
-              , ("id", JE.int id)
-              ]
-
-        Player.Stopped ->
-          JE.object [("action", JE.string "stop")]
-  in webAudioControl jvalue
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
@@ -144,14 +118,8 @@ update msg model =
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     PlayerMsg msg ->
-      let
-        (updatedPlayer, cmd) = Player.update msg model.player
-        batchCmd = Cmd.batch [Cmd.map PlayerMsg cmd, syncWebAudio updatedPlayer model.server]
-      in ({ model | player = updatedPlayer }, batchCmd)
-    MutedPlayerMsg msg ->
-      let (updatedPlayer, cmd) = Player.update msg model.player
+      let (updatedPlayer, cmd) = Player.update msg model.player model.server
       in ({ model | player = updatedPlayer }, Cmd.map PlayerMsg cmd)
-
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )
     VisitLocation navLoc ->
@@ -176,11 +144,11 @@ update msg model =
 
 -- SUB
 
-port webAudio : (JD.Value -> msg) -> Sub msg
-
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-  webAudio (MutedPlayerMsg << Player.Sync)
+subscriptions model =
+  Sub.batch
+    [ Sub.map PlayerMsg (Player.subscriptions model.player)
+    ]
 
 -- VIEW
 

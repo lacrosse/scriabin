@@ -1,9 +1,10 @@
-module Components.Player exposing (..)
+port module Components.Player exposing (..)
 
 import Html exposing (Html, ul, p, text, li, a, div, nav)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
+import Json.Encode as JE
 
 import Components.FontAwesome exposing (fa)
 import Models.File exposing (File)
@@ -32,77 +33,135 @@ type Msg
   | Update (List File) File
   | Sync JD.Value
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+port webAudioControl : JE.Value -> Cmd msg
+
+syncWebAudio : Model -> String -> Cmd Msg
+syncWebAudio player server =
+  let
+    toJvalue player server =
+      case player of
+        Working state time file _ next ->
+          case state of
+            Playing ->
+              let
+                default =
+                  [("action", JE.string "play"), ("time", JE.float time)] ++ fileTuples file server
+                tail =
+                  case List.head next of
+                    Just nextFile ->
+                      [("next", JE.object (fileTuples nextFile server))]
+                    Nothing ->
+                      []
+              in JE.object (default ++ tail)
+            Paused ->
+              JE.object ([("action", JE.string "pause"), ("time", JE.float time)] ++ fileTuples file server)
+        Stopped ->
+          JE.object [("action", JE.string "stop")]
+  in webAudioControl (toJvalue player server)
+
+commandNature : Model -> String -> ( Model, Cmd Msg )
+commandNature model server =
+  (model, syncWebAudio model server)
+
+update : Msg -> Model -> String -> ( Model, Cmd Msg )
+update msg model server =
   case msg of
     Stop ->
       (Stopped, Cmd.none)
     Pause ->
       case model of
         Working Playing time file previous next ->
-          (Working Paused time file previous next, Cmd.none)
+          commandNature (Working Paused time file previous next) server
         _ ->
-          (model, Cmd.none)
+          commandNature model server
     Play ->
       case model of
         Working Paused time file previous next ->
-          (Working Playing time file previous next, Cmd.none)
+          commandNature (Working Playing time file previous next) server
         _ ->
-          (model, Cmd.none)
+          commandNature model server
     Backward ->
       case model of
         Working state time file previous next ->
           if time > 5 then
-            (Working state 0 file previous next, Cmd.none)
+            commandNature (Working state 0 file previous next) server
           else
             case previous of
               [] ->
-                (Working state 0 file previous next, Cmd.none)
+                commandNature (Working state 0 file previous next) server
               file :: newPrevious ->
-                (Working state 0 file newPrevious (file :: next), Cmd.none)
+                commandNature (Working state 0 file newPrevious (file :: next)) server
         Stopped ->
-          (model, Cmd.none)
+          commandNature model server
     Forward ->
       case model of
         Working state time file previous next ->
           case next of
             [] ->
-              (model, Cmd.none)
+              commandNature model server
             file :: newNext ->
-              (Working state 0 file (file :: previous) newNext, Cmd.none)
+              commandNature (Working state 0 file (file :: previous) newNext) server
         Stopped ->
-          (model, Cmd.none)
+          commandNature model server
     Update files file ->
       let (previous, next) = splitList files file
-      in (Working Playing 0 file previous next, Cmd.none)
+      in commandNature (Working Playing 0 file previous next) server
     Sync jvalue ->
       let
-        newModel =
-          case JD.decodeValue (JD.field "state" JD.string) jvalue of
-            Ok "paused" ->
-              case model of
-                Working _ _ file previous next ->
-                  let
-                    time =
-                      case JD.decodeValue (JD.field "offset" JD.float) jvalue of
-                        Ok val -> val
-                        Err err -> 0
-                  in Working Paused time file previous next
-                _ -> model
-            Ok "playing" ->
-              case model of
-                Working Playing _ file previous next ->
-                  let
-                    time =
-                      case JD.decodeValue (JD.field "offset" JD.float) jvalue of
-                        Ok val -> val
-                        Err err -> 0
-                  in Working Playing time file previous next
-                _ ->
-                  model
-            _ ->
-              model
-      in (newModel, Cmd.none)
+        time =
+          case JD.decodeValue (JD.field "offset" JD.float) jvalue of
+            Ok val -> val
+            Err err -> 0
+      in
+        case JD.decodeValue (JD.field "state" JD.string) jvalue of
+          Ok "paused" ->
+            case model of
+              Working _ _ file previous next ->
+                (Working Paused time file previous next, Cmd.none)
+              Stopped ->
+                (Stopped, Cmd.none)
+          Ok "playing" ->
+            case model of
+              Working _ _ file previous next ->
+                case JD.decodeValue (JD.field "remaining" JD.float) jvalue of
+                  Ok remaining ->
+                    if remaining <= 5 then
+                      let
+                        cmd =
+                          case List.head next of
+                            Just nextFile ->
+                              let
+                                jvalue =
+                                  JE.object (("action", JE.string "preload") :: fileTuples nextFile server)
+                              in webAudioControl jvalue
+                            Nothing ->
+                              Cmd.none
+                      in (Working Playing time file previous next, cmd)
+                    else
+                      (Working Playing time file previous next, Cmd.none)
+                  Err _ ->
+                    (Working Playing time file previous next, Cmd.none)
+              Stopped ->
+                (model, Cmd.none)
+          Ok "finished" ->
+            case model of
+              Working _ _ file previous next ->
+                case next of
+                  nextFile :: newNext ->
+                    commandNature (Working Playing 0 nextFile (file :: previous) newNext) server
+                  _ ->
+                    (Stopped, Cmd.none)
+              Stopped ->
+                (Stopped, Cmd.none)
+          _ ->
+            (model, Cmd.none)
+
+-- SUB
+
+port webAudio : (JD.Value -> msg) -> Sub msg
+
+subscriptions : Model -> Sub Msg
+subscriptions _ = webAudio Sync
 
 -- VIEW
 
@@ -146,6 +205,12 @@ view model =
         ]
 
 -- FUNCTIONS
+
+fileUrl : String -> String -> String
+fileUrl server sha256 = server ++ "/files/" ++ sha256
+
+fileTuples : File -> String -> List ( String, JE.Value )
+fileTuples file server = [("url", JE.string (fileUrl server file.sha256)), ("id", JE.int file.id)]
 
 splitList : List a -> a -> (List a, List a)
 splitList list separator =

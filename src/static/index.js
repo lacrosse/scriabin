@@ -5,9 +5,14 @@ var Scriabin = require('../elm/Main');
 
 window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'));
 
+var DURATION_TRACKING_FREQUENCY = 500;
+var PRELOAD_THRESHOLD = 5;
+
 window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
+  console.log('Nature!!!', object);
   if (object.action == 'play') {
     window.player.play(object.url, object.time, object.id);
+    window.player.next = object.next;
   } else if (object.action == 'pause') {
     window.player.pause(object.url, object.id);
   } else if (object.action == 'stop') {
@@ -24,24 +29,35 @@ window.player = {
   audioSource: null,
   buffers: {},
   startedAt: null,
+  willEndAt: null,
   offset: 0,
   durationWorker: null,
+  next: null,
 
   sync: function (state) {
     window.ScriabinApp.ports.webAudio.send(state);
   },
 
-  startDurationWorker: function () {
-    var _this = this;
-    this.durationWorker = setTimeout(function () {
-      if (_this.startedAt) {
-        window.ScriabinApp.ports.webAudio.send({
-          state: 'playing',
-          offset: audioContext.currentTime - _this.startedAt,
-        });
-        _this.startDurationWorker();
+  trackDuration: function () {
+    var currentTime = audioContext.currentTime;
+
+    if (this.startedAt && this.willEndAt > currentTime) {
+      window.ScriabinApp.ports.webAudio.send({
+        state: 'playing',
+        offset: currentTime - this.startedAt,
+      });
+
+      if (this.next && this.willEndAt - currentTime <= PRELOAD_THRESHOLD) {
+        this.load(this.next.url, this.next.id);
+        this.next = null;
       }
-    }, 500);
+
+      var _this = this;
+
+      this.durationWorker = setTimeout(function () {
+        _this.trackDuration();
+      }, DURATION_TRACKING_FREQUENCY);
+    }
   },
 
   connectAndStart: function (id, time) {
@@ -49,9 +65,18 @@ window.player = {
     this.audioSource.connect(audioContext.destination);
     this.audioSource.buffer = this.buffers[id];
     this.audioSource.start(0, time);
-    this.startedAt = audioContext.currentTime - time;
 
-    this.startDurationWorker();
+    var _this = this;
+    this.audioSource.onended = function () {
+      _this.sync({
+        state: 'finished',
+      });
+    };
+
+    this.startedAt = audioContext.currentTime - time;
+    this.willEndAt = this.startedAt + this.buffers[id].duration;
+
+    this.trackDuration();
   },
 
   destroySource: function () {
@@ -60,6 +85,14 @@ window.player = {
       this.audioSource.stop();
       this.audioSource = null;
     }
+
+    if (this.durationWorker) {
+      clearTimeout(this.durationWorker);
+      this.durationWorker = null;
+    }
+
+    this.startedAt = null;
+    this.willEndAt = null;
   },
 
   load: function (url, id, then) {
@@ -85,17 +118,15 @@ window.player = {
   },
 
   stop: function () {
-    this.destroySource();
     this.offset = 0;
-    this.startedAt = null;
+    this.destroySource();
   },
 
   pause: function (url, id) {
+    this.offset = audioContext.currentTime - this.startedAt;
     this.destroySource();
     this.load(url, id);
 
-    this.offset = audioContext.currentTime - this.startedAt;
-    this.startedAt = null;
     this.sync({
       state: 'paused',
       offset: this.offset,
