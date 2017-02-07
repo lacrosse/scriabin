@@ -60,7 +60,7 @@ init navLoc =
       { routing = Routing.initialModel
       , session = Session.initialModel
       , flash = Flash.initialModel
-      , server = "http://localhost:4000/api"
+      , server = navLoc.origin ++ "/api"
       , store = Store.initialModel
       , player = Player.initialModel
       }

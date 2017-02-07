@@ -35,7 +35,7 @@ routeToString : Route -> String
 routeToString route =
   case route of
     Root ->
-      "/"
+      "#/"
     NewSession ->
       "#/sign-in"
     Composers ->
