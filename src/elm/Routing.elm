@@ -1,7 +1,8 @@
 module Routing exposing (..)
 
 import Navigation exposing (Location)
-import UrlParser exposing (Parser, parseHash, oneOf, top, map, s, (</>), int)
+import UrlParser exposing (Parser, parseHash, oneOf, top, map, s, (</>), int, custom)
+import Regex
 
 -- MODEL
 
@@ -9,7 +10,7 @@ type Route
   = Root
   | NewSession
   | Composers
-  | Assemblage Int
+  | Assemblage Int String
 
 type alias Model =
   { currentRoute : Maybe Route }
@@ -20,12 +21,17 @@ initialModel =
 
 -- FUNCTIONS
 
+basedInt : Parser (Int -> b) b
+basedInt =
+  custom "BASED_INT" <| \s ->
+    (String.toInt << Maybe.withDefault s << List.head << Regex.split (Regex.AtMost 1) (Regex.regex "-")) s
+
 routingTable : List (Parser (Route -> c) c)
 routingTable =
-  [ map Assemblage (s "assemblages" </> int)
-  , map NewSession (s "sign-in")
-  , map Composers  (s "composers")
-  , map Root       (top)
+  [ map (flip Assemblage "") (s "assemblages" </> basedInt)
+  , map NewSession           (s "sign-in")
+  , map Composers            (s "composers")
+  , map Root                 (top)
   ]
 
 locationToRoute : Location -> Maybe Route
@@ -40,5 +46,5 @@ routeToString route =
       "#/sign-in"
     Composers ->
       "#/composers"
-    Assemblage id ->
-      "#/assemblages/" ++ (toString id)
+    Assemblage id string ->
+      "#/assemblages/" ++ toString id ++ string

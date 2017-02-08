@@ -1,6 +1,7 @@
 module Models.Assemblage exposing (..)
 
 import Json.Decode as JD
+import Regex
 
 -- MODEL
 
@@ -28,10 +29,6 @@ isComposer { kind } =
     _ ->
       False
 
-fullName : Assemblage -> String
-fullName { name } =
-  name
-
 parseKind : String -> Kind
 parseKind string =
   case string of
@@ -39,6 +36,14 @@ parseKind string =
     "composition" -> Composition
     "recording" -> Recording
     _ -> General
+
+toUrlSlug : Assemblage -> String
+toUrlSlug { name } =
+  "-" ++
+    name
+      |> Regex.replace Regex.All (Regex.regex "\\W+") (always "-")
+      |> Regex.replace Regex.All (Regex.regex "-+$") (always "")
+      |> String.toLower
 
 -- DECODERS
 

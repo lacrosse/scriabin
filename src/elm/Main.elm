@@ -157,9 +157,9 @@ template { routing, store, session, server } =
     Just Routing.Composers ->
       let
         assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
-        assemblages = ((List.sortBy .name) << List.map Tuple.second << Dict.toList) assemblagesStore
+        assemblages = (List.sortBy .name << List.map Tuple.second << Dict.toList) assemblagesStore
       in assemblagesView assemblages
-    Just (Routing.Assemblage id) ->
+    Just (Routing.Assemblage id _) ->
       case Dict.get id store.assemblages of
         Just assemblage ->
           assemblageView assemblage store
@@ -193,8 +193,8 @@ assemblagesView list =
   [div [] (List.map assemblageRowView list)]
 
 assemblageLink : Assemblage -> Html Msg
-assemblageLink { id, name } =
-  navLink (Routing.Assemblage id) [] [ text name ]
+assemblageLink assemblage =
+  navLink (Routing.Assemblage assemblage.id (Assemblage.toUrlSlug assemblage)) [] [ text assemblage.name ]
 
 assemblageRowView : Assemblage -> Html Msg
 assemblageRowView a =
@@ -226,10 +226,7 @@ assemblageView assemblage store =
 
 assemblageRow : Assemblage -> Html Msg
 assemblageRow a =
-  tr []
-    [ td []
-      [ assemblageLink a ]
-    ]
+  tr [] [ td [] [ assemblageLink a ] ]
 
 assemblageTable : String -> List Assemblage -> List (Html Msg)
 assemblageTable name assemblages =
@@ -283,10 +280,7 @@ enumerateHuman list =
 
 prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
 prependAndEnumerateLinks str =
-  (::) (text (str ++ " ")) << enumerateHuman << (List.map assemblageLink)
-
-reconstructedBy : List Assemblage -> List (Html Msg)
-reconstructedBy = prependAndEnumerateLinks "reconstructed by"
+  (::) (text (str ++ " ")) << enumerateHuman << List.map assemblageLink
 
 personView : Assemblage -> Store -> List (Html Msg)
 personView assemblage store =
@@ -327,12 +321,14 @@ compositionHeader store h1Link assemblage =
         [ text " "
         , span [ class "text-muted" ] (text "in " :: enumerateHuman (List.map (text << .value) tonalityTags))
         ]
-    compositionName =
+    name =
       if h1Link then
-        navLink (Routing.Assemblage assemblage.id) [] [ text (Assemblage.fullName assemblage) ]
+        assemblageLink assemblage
       else
-        text (Assemblage.fullName assemblage)
-    nameHeader = h1 [] (compositionName :: tonality)
+        (text << .name) assemblage
+    postName = tonality
+    fullName = name :: postName
+    nameHeader = h1 [] fullName
     composers =
       assemblagesThroughAssemblies assemblage store .childAssemblageId .assemblageId Assembly.Composed Assemblage.Person
     creationDate =
@@ -356,7 +352,11 @@ compositionHeader store h1Link assemblage =
       if List.isEmpty reconstructors then
         []
       else
-        [h4 [] (reconstructedBy reconstructors)]
+        [ h4 []
+          ([ text "reconstructed " ]
+          ++ prependAndEnumerateLinks "by" reconstructors
+          )
+        ]
   in ([nameHeader] ++ composedByHeader ++ reconstructedByHeader, tags)
 
 compositionView : Assemblage -> Store -> List (Html Msg)
@@ -467,7 +467,7 @@ handleCelesteResponse : Result Jwt.JwtError Celeste.Response -> Msg
 handleCelesteResponse response =
   case response of
     Ok cResp ->
-      StoreRecords (Celeste.responseToTuple cResp)
+      (StoreRecords << Celeste.responseToTuple) cResp
     Err (Jwt.HttpError (Http.BadPayload err _)) ->
       (FlashMsg << Flash.DeriveFromString) err
     _ ->
@@ -487,7 +487,7 @@ processLocation navLoc model =
         Nothing -> Cmd.none
     fetchCmd =
       case route of
-        Just (Routing.Assemblage id) ->
+        Just (Routing.Assemblage id _) ->
           (authorized << fetch model.server) (Celeste.Assemblage id)
         Just Routing.Composers ->
           (authorized << fetch model.server) Celeste.Composers
