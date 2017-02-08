@@ -1,5 +1,7 @@
 module Session exposing (..)
 
+import LocalStorage
+
 -- MODEL
 
 type alias Model = Session
@@ -34,6 +36,7 @@ type Msg
   = UpdateWannabeUsername String
   | UpdateWannabePassword String
   | FlushWannabe
+  | SignOut
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -50,3 +53,5 @@ update msg model =
       in ( { model | wannabe = new }, Cmd.none )
     FlushWannabe ->
       ( { model | wannabe = initialWannabe }, Cmd.none )
+    SignOut ->
+      ({ model | user = Nothing }, LocalStorage.remove "token")

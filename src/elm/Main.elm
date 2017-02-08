@@ -100,11 +100,6 @@ update msg model =
                 Err error -> SignInFail error
           in Http.send process fetch
       in ( model, signIn model.session.wannabe )
-    SignOut ->
-      let
-        old = model.session
-        new = { old | user = Nothing }
-      in ( { model | session = new }, LocalStorage.remove "token" )
     SignInSucceed user ->
       let
         old = model.session
@@ -128,13 +123,7 @@ update msg model =
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     PlayerMsg msg ->
-      let
-        (updatedPlayer, cmd) =
-          case model.session.user of
-            Just { jwt } ->
-              Player.update msg model.player (model.server, jwt)
-            Nothing ->
-              (model.player, Cmd.none)
+      let (updatedPlayer, cmd) = Player.update msg model.player model.server
       in ({ model | player = updatedPlayer }, Cmd.map PlayerMsg cmd)
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )
@@ -444,7 +433,7 @@ view model =
               )
               (faText "user-circle-o" user.username)
             , ul [ class "dropdown-menu" ]
-              [ li [] [ a [ href "#", onClick SignOut ] (faText "sign-out" "Sign Out") ] ]
+              [ li [] [ a [ href "#", onClick (SessionMsg Session.SignOut) ] (faText "sign-out" "Sign Out") ] ]
             ]
         Nothing ->
           li []

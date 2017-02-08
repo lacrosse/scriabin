@@ -35,77 +35,77 @@ type Msg
 
 port webAudioControl : JE.Value -> Cmd msg
 
-syncWebAudio : Model -> ( String, String ) -> Cmd Msg
-syncWebAudio player serverTuple =
+syncWebAudio : Model -> String -> Cmd Msg
+syncWebAudio player server =
   let
-    toJvalue player serverTuple =
+    toJvalue player server =
       case player of
         Working state time file _ next ->
           case state of
             Playing ->
               let
                 default =
-                  [("action", JE.string "play"), ("time", JE.float time)] ++ fileTuples file serverTuple
+                  [("action", JE.string "play"), ("time", JE.float time)] ++ fileTuples file server
                 tail =
                   case List.head next of
                     Just nextFile ->
-                      [("next", JE.object (fileTuples nextFile serverTuple))]
+                      [("next", JE.object (fileTuples nextFile server))]
                     Nothing ->
                       []
               in JE.object (default ++ tail)
             Paused ->
-              JE.object ([("action", JE.string "pause"), ("time", JE.float time)] ++ fileTuples file serverTuple)
+              JE.object ([("action", JE.string "pause"), ("time", JE.float time)] ++ fileTuples file server)
         Stopped ->
           JE.object [("action", JE.string "stop")]
-  in webAudioControl (toJvalue player serverTuple)
+  in webAudioControl (toJvalue player server)
 
-commandNature : Model -> ( String, String ) -> ( Model, Cmd Msg )
-commandNature model serverTuple =
-  (model, syncWebAudio model serverTuple)
+commandNature : Model -> String -> ( Model, Cmd Msg )
+commandNature model server =
+  (model, syncWebAudio model server)
 
-update : Msg -> Model -> ( String, String ) -> ( Model, Cmd Msg )
-update msg model (server, token) =
+update : Msg -> Model -> String -> ( Model, Cmd Msg )
+update msg model server =
   case msg of
     Stop ->
-      commandNature Stopped (server, token)
+      commandNature Stopped server
     Pause ->
       case model of
         Working Playing time file previous next ->
-          commandNature (Working Paused time file previous next) (server, token)
+          commandNature (Working Paused time file previous next) server
         _ ->
-          commandNature model (server, token)
+          commandNature model server
     Play ->
       case model of
         Working Paused time file previous next ->
-          commandNature (Working Playing time file previous next) (server, token)
+          commandNature (Working Playing time file previous next) server
         _ ->
-          commandNature model (server, token)
+          commandNature model server
     Backward ->
       case model of
         Working state time file previous next ->
           if time > 5 then
-            commandNature (Working state 0 file previous next) (server, token)
+            commandNature (Working state 0 file previous next) server
           else
             case previous of
               [] ->
-                commandNature (Working state 0 file previous next) (server, token)
+                commandNature (Working state 0 file previous next) server
               previousFile :: newPrevious ->
-                commandNature (Working state 0 previousFile newPrevious (file :: next)) (server, token)
+                commandNature (Working state 0 previousFile newPrevious (file :: next)) server
         Stopped ->
-          commandNature model (server, token)
+          commandNature model server
     Forward ->
       case model of
         Working state time file previous next ->
           case next of
             [] ->
-              commandNature model (server, token)
+              commandNature model server
             nextFile :: newNext ->
-              commandNature (Working state 0 nextFile (file :: previous) newNext) (server, token)
+              commandNature (Working state 0 nextFile (file :: previous) newNext) server
         Stopped ->
-          commandNature model (server, token)
+          commandNature model server
     Update files file ->
       let (previous, next) = splitList files file
-      in commandNature (Working Playing 0 file previous next) (server, token)
+      in commandNature (Working Playing 0 file previous next) server
     Sync jvalue ->
       let
         time =
@@ -132,7 +132,7 @@ update msg model (server, token) =
                             Just nextFile ->
                               let
                                 jvalue =
-                                  JE.object (("action", JE.string "preload") :: fileTuples nextFile (server, token))
+                                  JE.object (("action", JE.string "preload") :: fileTuples nextFile server)
                               in webAudioControl jvalue
                             Nothing ->
                               Cmd.none
@@ -148,7 +148,7 @@ update msg model (server, token) =
               Working _ _ file previous next ->
                 case next of
                   nextFile :: newNext ->
-                    commandNature (Working Playing 0 nextFile (file :: previous) newNext) (server, token)
+                    commandNature (Working Playing 0 nextFile (file :: previous) newNext) server
                   _ ->
                     (Stopped, Cmd.none)
               Stopped ->
@@ -158,10 +158,10 @@ update msg model (server, token) =
 
 -- SUB
 
-port webAudio : (JD.Value -> msg) -> Sub msg
+port webAudioFeedback : (JD.Value -> msg) -> Sub msg
 
 subscriptions : Model -> Sub Msg
-subscriptions _ = webAudio Sync
+subscriptions _ = webAudioFeedback Sync
 
 -- VIEW
 
@@ -212,13 +212,12 @@ view model =
 -- FUNCTIONS
 
 fileUrl : String -> String -> String
-fileUrl server sha256 = server ++ "/files/" ++ sha256
+fileUrl server path = server ++ "/files/" ++ path
 
-fileTuples : File -> ( String, String ) -> List ( String, JE.Value )
-fileTuples file (server, token) =
-  [ ("url", JE.string (fileUrl server file.sha256))
+fileTuples : File -> String -> List ( String, JE.Value )
+fileTuples file server =
+  [ ("url", JE.string (fileUrl server file.path))
   , ("id", JE.int file.id)
-  , ("token", JE.string token)
   ]
 
 splitList : List a -> a -> (List a, List a)

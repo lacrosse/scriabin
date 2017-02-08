@@ -13,7 +13,6 @@ type Msg
   | SignIn
   | SignInSucceed Session.User
   | SignInFail Http.Error
-  | SignOut
   | SessionMsg Session.Msg
   | FlashMsg Flash.Msg
   | SetRoute Routing.Route

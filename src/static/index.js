@@ -3,17 +3,18 @@ require('../../node_modules/bootstrap-sass/assets/javascripts/bootstrap');
 
 var Scriabin = require('../elm/Main');
 
+window.Howl = require('howler').Howl;
+
 window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'), {
   token: window.localStorage.getItem('token'),
 });
 
 var DURATION_TRACKING_FREQUENCY = 500;
-var PRELOAD_THRESHOLD = 20;
+var PRELOAD_THRESHOLD = 10;
 
 // LocalStorage
 
 window.ScriabinApp.ports.localStorage.subscribe(function (object) {
-  console.log(object);
   if (object.action == 'set') {
     window.localStorage.setItem(object.key, object.value);
   } else if (object.action == 'get') {
@@ -23,15 +24,114 @@ window.ScriabinApp.ports.localStorage.subscribe(function (object) {
     });
   } else if (object.action == 'remove') {
     window.localStorage.removeItem(object.key);
+  } else {
+    throw 'u mad bro';
   }
 });
 
 // Audio
 
+window.player = {
+  howls: {},
+  currentHowl: null,
+  next: null,
+  durationWorker: null,
+
+  sync: function (state) {
+    window.ScriabinApp.ports.webAudioFeedback.send(state);
+  },
+
+  trackDuration: function () {
+    var h = this.currentHowl;
+
+    if (!this.durationWorker && h) {
+      var seek = h.seek();
+      var duration = h.duration();
+      var remaining = duration - seek;
+
+      if (h.playing() && remaining > 0) {
+        this.sync({
+          state: 'playing',
+          offset: seek,
+        });
+
+        if (this.next && remaining <= PRELOAD_THRESHOLD) {
+          player.buildHowl(this.next.url, this.next.id);
+          this.next = null;
+        }
+
+        var _this = this;
+
+        this.durationWorker = setTimeout(function () {
+          _this.durationWorker = null;
+          _this.trackDuration();
+        }, DURATION_TRACKING_FREQUENCY);
+      }
+    }
+  },
+
+  buildHowl: function (url, id) {
+    var h = this.howls[id];
+
+    if (!h) {
+      h = new Howl({
+        src: [url],
+        format: ['mp3'],
+        html5: true,
+      });
+
+      this.howls[id] = h;
+    }
+
+    return h;
+  },
+
+  play: function (url, id, time) {
+    this.stop();
+
+    var h = this.buildHowl(url, id);
+
+    this.currentHowl = h;
+    h.seek(time);
+    h.play();
+
+    var _this = this;
+
+    h.once('play', function () {
+      _this.trackDuration();
+    });
+
+    h.once('end', function () {
+      _this.sync({
+        state: 'finished',
+      });
+    });
+  },
+
+  pause: function (url, id) {
+    var h = this.currentHowl;
+
+    h.pause();
+
+    this.sync({
+      state: 'paused',
+      offset: h.seek(),
+    });
+  },
+
+  stop: function () {
+    var h = this.currentHowl;
+
+    if (h) h.stop();
+
+    this.currentHowl = null;
+  },
+};
+
 window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {
-    window.player.play(object.url, object.token, object.time, object.id);
-    window.player.next = object.next;
+    player.play(object.url, object.id, object.time);
+    player.next = object.next;
   } else if (object.action == 'pause') {
     window.player.pause(object.url, object.token, object.id);
   } else if (object.action == 'stop') {
@@ -40,122 +140,3 @@ window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
     throw 'u mad bro';
   }
 });
-
-AudioContext = window.AudioContext || window.webkitAudioContext;
-audioContext = new AudioContext();
-
-window.player = {
-  audioSource: null,
-  buffers: {},
-  startedAt: null,
-  willEndAt: null,
-  offset: 0,
-  durationWorker: null,
-  next: null,
-
-  sync: function (state) {
-    window.ScriabinApp.ports.webAudio.send(state);
-  },
-
-  trackDuration: function () {
-    var currentTime = audioContext.currentTime;
-
-    if (this.startedAt && this.willEndAt > currentTime) {
-      window.ScriabinApp.ports.webAudio.send({
-        state: 'playing',
-        offset: currentTime - this.startedAt,
-      });
-
-      if (this.next && this.willEndAt - currentTime <= PRELOAD_THRESHOLD) {
-        this.load(this.next.url, this.next.token, this.next.id);
-        this.next = null;
-      }
-
-      var _this = this;
-
-      this.durationWorker = setTimeout(function () {
-        _this.trackDuration();
-      }, DURATION_TRACKING_FREQUENCY);
-    }
-  },
-
-  connectAndStart: function (id, time) {
-    this.audioSource = audioContext.createBufferSource();
-    this.audioSource.connect(audioContext.destination);
-    this.audioSource.buffer = this.buffers[id];
-    this.audioSource.start(0, time);
-
-    var _this = this;
-    this.audioSource.onended = function () {
-      _this.sync({
-        state: 'finished',
-      });
-    };
-
-    this.startedAt = audioContext.currentTime - time;
-    this.willEndAt = this.startedAt + this.buffers[id].duration;
-
-    this.trackDuration();
-  },
-
-  destroySource: function () {
-    if (this.audioSource) {
-      this.audioSource.disconnect();
-      this.audioSource.stop();
-      this.audioSource = null;
-    }
-
-    if (this.durationWorker) {
-      clearTimeout(this.durationWorker);
-      this.durationWorker = null;
-    }
-
-    this.startedAt = null;
-    this.willEndAt = null;
-  },
-
-  load: function (url, token, id, then) {
-    then = then || function () {};
-
-    if (this.buffers[id]) {
-      then();
-    } else {
-      var request = new XMLHttpRequest();
-      var _this = this;
-
-      request.open('GET', url, true);
-      request.setRequestHeader('Authorization', 'Bearer ' + token);
-      request.responseType = 'arraybuffer';
-      request.onload = function () {
-        audioContext.decodeAudioData(request.response, function (buffer) {
-          _this.buffers[id] = buffer;
-          then();
-        });
-      };
-
-      request.send();
-    }
-  },
-
-  stop: function () {
-    this.offset = 0;
-    this.destroySource();
-  },
-
-  pause: function (url, token, id) {
-    this.offset = audioContext.currentTime - this.startedAt;
-    this.destroySource();
-    this.load(url, token, id);
-
-    this.sync({
-      state: 'paused',
-      offset: this.offset,
-    });
-  },
-
-  play: function (url, token, time, id) {
-    var _this = this;
-    this.destroySource();
-    this.load(url, token, id, function () { _this.connectAndStart(id, time); });
-  },
-};

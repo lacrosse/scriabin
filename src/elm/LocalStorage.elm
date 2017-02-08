@@ -1,4 +1,4 @@
-port module LocalStorage exposing (..)
+port module LocalStorage exposing (set, remove)
 
 import Json.Encode as JE
 
