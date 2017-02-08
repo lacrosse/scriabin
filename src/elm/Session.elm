@@ -23,11 +23,10 @@ initialWannabe : Wannabe
 initialWannabe =
   { username = "", password = "" }
 
-initialModel : Model
-initialModel =
-  { user = Nothing
-  , wannabe = initialWannabe
-  }
+initialModel : Maybe String -> Model
+initialModel jwt =
+  let user = Maybe.map (\j -> { username = "", jwt = j }) jwt
+  in { user = user, wannabe = initialWannabe }
 
 -- UPDATE
 

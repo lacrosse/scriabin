@@ -3,10 +3,28 @@ require('../../node_modules/bootstrap-sass/assets/javascripts/bootstrap');
 
 var Scriabin = require('../elm/Main');
 
-window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'));
+window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'), {
+  token: window.localStorage.getItem('token'),
+});
 
 var DURATION_TRACKING_FREQUENCY = 500;
-var PRELOAD_THRESHOLD = 5;
+var PRELOAD_THRESHOLD = 20;
+
+// LocalStorage
+
+window.ScriabinApp.ports.localStorage.subscribe(function (object) {
+  console.log(object);
+  if (object.action == 'set') {
+    window.localStorage.setItem(object.key, object.value);
+  } else if (object.action == 'get') {
+    window.localStorageFeedback.send({
+      key: object.key,
+      value: window.localStorage.getItem(object.key),
+    });
+  }
+});
+
+// Audio
 
 window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {

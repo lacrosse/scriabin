@@ -27,15 +27,16 @@ import Models.Assembly as Assembly exposing (Assembly)
 import Models.File as File exposing (File)
 import Models.Tag as Tag exposing (Tag)
 import Routing
+import LocalStorage
 import Celeste
 import Views exposing (..)
 import Session exposing (Session)
 import Store exposing (Store)
 import Messages exposing (..)
 
-main : Program Never Model Msg
+main : Program Flags Model Msg
 main =
-  Navigation.program VisitLocation
+  Navigation.programWithFlags VisitLocation
     { init = init
     , view = view
     , update = update
@@ -43,6 +44,10 @@ main =
     }
 
 -- MODEL
+
+type alias Flags =
+  { token : Maybe String
+  }
 
 type alias Model =
   { routing : Routing.Model
@@ -53,18 +58,20 @@ type alias Model =
   , player : Player.Model
   }
 
-init : Navigation.Location -> ( Model, Cmd Msg )
-init navLoc =
+init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
+init { token } navLoc =
   let
+    serverRoot = navLoc.origin
     preModel =
       { routing = Routing.initialModel
-      , session = Session.initialModel
+      , session = Session.initialModel token
       , flash = Flash.initialModel
-      , server = navLoc.origin ++ "/api"
+      , server = serverRoot ++ "/api"
       , store = Store.initialModel
       , player = Player.initialModel
       }
-  in processLocation navLoc preModel
+    (model, navCmd) = processLocation navLoc preModel
+  in (model, navCmd)
 
 -- UPDATE
 
@@ -102,8 +109,16 @@ update msg model =
       let
         old = model.session
         new = { old | user = Just user }
-        redirectCmd = Task.perform SetRoute <| Task.succeed Routing.Root
-      in ( { model | session = new }, redirectCmd )
+        redirectCmd = Task.perform SetRoute (Task.succeed Routing.Root)
+        jvalue =
+          JE.object
+            [ ("action", JE.string "set")
+            , ("key", JE.string "token")
+            , ("value", JE.string user.jwt)
+            ]
+        localStorageCmd = LocalStorage.localStorage jvalue
+        cmd = Cmd.batch [redirectCmd, localStorageCmd]
+      in ( { model | session = new }, cmd )
     SignInFail error ->
       case error of
         Http.BadPayload message response ->
