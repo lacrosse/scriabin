@@ -104,21 +104,14 @@ update msg model =
       let
         old = model.session
         new = { old | user = Nothing }
-      in ( { model | session = new }, Cmd.none )
+      in ( { model | session = new }, LocalStorage.remove "token" )
     SignInSucceed user ->
       let
         old = model.session
         new = { old | user = Just user }
-        redirectCmd = Task.perform SetRoute (Task.succeed Routing.Root)
-        jvalue =
-          JE.object
-            [ ("action", JE.string "set")
-            , ("key", JE.string "token")
-            , ("value", JE.string user.jwt)
-            ]
-        localStorageCmd = LocalStorage.localStorage jvalue
-        cmd = Cmd.batch [redirectCmd, localStorageCmd]
-      in ( { model | session = new }, cmd )
+        redirect = Task.perform SetRoute (Task.succeed Routing.Root)
+        persistToken = LocalStorage.set "token" user.jwt
+      in ( { model | session = new }, Cmd.batch [redirect, persistToken] )
     SignInFail error ->
       case error of
         Http.BadPayload message response ->

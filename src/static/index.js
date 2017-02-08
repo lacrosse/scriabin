@@ -17,10 +17,12 @@ window.ScriabinApp.ports.localStorage.subscribe(function (object) {
   if (object.action == 'set') {
     window.localStorage.setItem(object.key, object.value);
   } else if (object.action == 'get') {
-    window.localStorageFeedback.send({
+    window.ScriabinApp.ports.localStorageFeedback.send({
       key: object.key,
       value: window.localStorage.getItem(object.key),
     });
+  } else if (object.action == 'remove') {
+    window.localStorage.removeItem(object.key);
   }
 });
 
