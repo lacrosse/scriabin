@@ -49,9 +49,13 @@ toUrlSlug { name } =
 
 jsonDecoder : JD.Decoder Assemblage
 jsonDecoder =
-  JD.map5 Assemblage
-    (JD.field "id" JD.int)
-    (JD.field "name" JD.string)
-    ((JD.map parseKind << JD.field "kind") JD.string)
-    ((JD.map (Maybe.withDefault []) << JD.maybe << JD.field "file_ids" << JD.list) JD.int)
-    ((JD.map (Maybe.withDefault []) << JD.maybe << JD.field "tag_ids" << JD.list) JD.int)
+  let
+    maybeList key =
+      (JD.map (Maybe.withDefault []) << JD.maybe << JD.field key << JD.list)
+  in
+    JD.map5 Assemblage
+      (JD.field "id" JD.int)
+      (JD.field "name" JD.string)
+      ((JD.map parseKind << JD.field "kind") JD.string)
+      (maybeList "file_ids" JD.int)
+      (maybeList "tag_ids" JD.int)

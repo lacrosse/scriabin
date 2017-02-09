@@ -9,6 +9,7 @@ import Regex
 type Route
   = Root
   | NewSession
+  | Stats
   | Composers
   | Assemblage Int String
 
@@ -30,6 +31,7 @@ routingTable : List (Parser (Route -> c) c)
 routingTable =
   [ map (flip Assemblage "") (s "assemblages" </> basedInt)
   , map NewSession           (s "sign-in")
+  , map Stats                (s "stats")
   , map Composers            (s "composers")
   , map Root                 (top)
   ]
@@ -44,6 +46,8 @@ routeToString route =
       "#/"
     NewSession ->
       "#/sign-in"
+    Stats ->
+      "#/stats"
     Composers ->
       "#/composers"
     Assemblage id string ->

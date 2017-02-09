@@ -11,11 +11,9 @@ import Html.Events exposing (onClick, onWithOptions)
 import Http
 import Navigation
 import Regex
-import Task
 import Jwt
 import Dict
 import Json.Decode as JD
-import Json.Encode as JE
 
 import Components.Html exposing (data, aria)
 import Components.FontAwesome exposing (faText)
@@ -27,7 +25,6 @@ import Models.Assembly as Assembly exposing (Assembly)
 import Models.File as File exposing (File)
 import Models.Tag as Tag exposing (Tag)
 import Routing
-import LocalStorage
 import Celeste
 import Views exposing (..)
 import Session exposing (Session)
@@ -79,43 +76,6 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
     Noop -> (model, Cmd.none)
-    SignIn ->
-      let
-        apiBase = model.server
-        signIn { username, password } =
-          let
-            url = apiBase ++ "/session"
-            sessionObject =
-              JE.object
-                [ ("username", JE.string username)
-                , ("password", JE.string password)
-                ]
-            wrappedSession = JE.object [ ( "session", sessionObject ) ]
-            decodeAttr str = JD.at ["session", str] JD.string
-            sessionDecoder = JD.map2 Session.User (decodeAttr "username") (decodeAttr "jwt")
-            fetch = Jwt.authenticate url sessionDecoder wrappedSession
-            process result =
-              case result of
-                Ok user -> SignInSucceed user
-                Err error -> SignInFail error
-          in Http.send process fetch
-      in ( model, signIn model.session.wannabe )
-    SignInSucceed user ->
-      let
-        old = model.session
-        new = { old | user = Just user }
-        redirect = Task.perform SetRoute (Task.succeed Routing.Root)
-        persistToken = LocalStorage.set "token" user.jwt
-      in ( { model | session = new }, Cmd.batch [redirect, persistToken] )
-    SignInFail error ->
-      case error of
-        Http.BadPayload message response ->
-          ( model, Cmd.none )
-        Http.BadStatus resp ->
-          update (FlashMsg (Flash.DeriveFromResponse resp)) model
-        _ ->
-          ( model, Cmd.none )
-
     FlashMsg msg ->
       let (updatedFlash, cmd) = Flash.update msg model.flash
       in ( { model | flash = updatedFlash }, Cmd.map FlashMsg cmd )
@@ -129,10 +89,30 @@ update msg model =
       ( model, Navigation.newUrl (Routing.routeToString route) )
     VisitLocation navLoc ->
       let
-        (newModel, fetchCmd) = processLocation navLoc model
-        (updatedFlash, flashCmd) = Flash.update Flash.Flush newModel.flash
-        cmd = Cmd.batch [fetchCmd, flashCmd]
-      in ( { newModel | flash = updatedFlash }, cmd )
+        (model_, fetchCmd) = processLocation navLoc model
+        (model__, flashCmd) = update (FlashMsg Flash.Flush) model_
+      in (model__, Cmd.batch [fetchCmd, flashCmd])
+    SignIn ->
+      let
+        cmd =
+          case model.session of
+            Session.Blank wannabe ->
+              wannabe
+                |> Session.signIn model.server
+                |> Http.send (\result ->
+                  case result of
+                    Ok user -> SignInSucceed user
+                    Err error -> SignInFail error)
+            Session.Present _ ->
+              Cmd.none
+      in (model, cmd)
+    SignInSucceed user ->
+      let
+        (model_, sessionCmd) = update (SessionMsg (Session.SignInSucceed user)) model
+        (model__, redirect) = update (SetRoute Routing.Root) model_
+      in (model__, Cmd.batch [sessionCmd, redirect])
+    SignInFail error ->
+      (update << FlashMsg << Flash.DeriveFromString << toString) error model
     StoreRecords tuple ->
       let (updatedStore, cmd) = Store.update tuple model.store
       in ({ model | store = updatedStore }, cmd)
@@ -141,9 +121,7 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.batch
-    [ Sub.map PlayerMsg (Player.subscriptions model.player)
-    ]
+  Sub.batch [ Sub.map PlayerMsg (Player.subscriptions model.player) ]
 
 -- VIEW
 
@@ -154,6 +132,8 @@ template { routing, store, session, server } =
       root server
     Just Routing.NewSession ->
       newSessionView session
+    Just Routing.Stats ->
+      [statsView session]
     Just Routing.Composers ->
       let
         assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
@@ -169,15 +149,15 @@ template { routing, store, session, server } =
       [notFound]
 
 newSessionView : Session -> List (Html Msg)
-newSessionView model =
-  let
-    form =
+newSessionView session =
+  case session of
+    Session.Blank { username, password } ->
       [ h1 [] [ text "Sign In" ]
       , horizontalForm SignIn
-        [ inputFormGroup "user" "username" "Username" "text" model.wannabe.username
+        [ inputFormGroup "user" "username" "Username" "text" username
           (SessionMsg << Session.UpdateWannabeUsername)
           [ placeholder "seanbooth" ]
-        , inputFormGroup "user" "password" "Password" "password" model.wannabe.password
+        , inputFormGroup "user" "password" "Password" "password" password
           (SessionMsg << Session.UpdateWannabePassword)
           [ placeholder "6IE.CR" ]
         , div [ class "form-group" ]
@@ -186,7 +166,8 @@ newSessionView model =
           ]
         ]
       ]
-  in form
+    Session.Present _ ->
+      [ h1 [] [ text "You are signed in." ] ]
 
 assemblagesView : List Assemblage -> List (Html Msg)
 assemblagesView list =
@@ -412,30 +393,33 @@ view model =
           ++ (aria [("expanded", "false")])
           )
           ( span [ class "sr-only" ] [ text "Toggle navigation" ] :: threeBars )
-        , navLink Routing.Root [ class "navbar-brand" ] (faText "music" "Celeste")
+        , navLink Routing.Root [ class "navbar-brand" ] [ text "Celeste" ]
         ]
     authenticatedItems =
-      case model.session.user of
-        Just _ ->
+      case model.session of
+        Session.Present _ ->
           [ li [] [ navLink Routing.Composers [] [ text "Composers" ] ]
           ]
-        Nothing ->
+        Session.Blank _ ->
           []
     leftNav = [ ul [ class "nav navbar-nav" ] authenticatedItems ]
     sessionNav =
-      case model.session.user of
-        Just user ->
+      case model.session of
+        Session.Present { username } ->
           li [ class "dropdown" ]
             [ a
               ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
               ++ data [("toggle", "dropdown")]
               ++ aria [("haspopup", "true"), ("expanded", "false")]
               )
-              (faText "user-circle-o" user.username)
+              (faText "user-circle-o" username)
             , ul [ class "dropdown-menu" ]
-              [ li [] [ a [ href "#", onClick (SessionMsg Session.SignOut) ] (faText "sign-out" "Sign Out") ] ]
+              [ li [] [ navLink Routing.Stats [] (faText "bar-chart" "Stats") ]
+              , li [ class "divider", attribute "role" "separator" ] []
+              , li [] [ a [ href "#", onClick (SessionMsg Session.SignOut) ] (faText "sign-out" "Sign Out") ]
+              ]
             ]
-        Nothing ->
+        Session.Blank _ ->
           li []
             [ navLink Routing.NewSession [] (faText "sign-in" "Sign In")
             ]
@@ -481,15 +465,12 @@ processLocation navLoc model =
   let
     route = Routing.locationToRoute navLoc
     newModel = { model | routing = { currentRoute = route } }
-    authorized f =
-      case newModel.session.user of
-        Just { jwt } -> f jwt
-        Nothing -> Cmd.none
     fetchCmd =
       case route of
         Just (Routing.Assemblage id _) ->
-          (authorized << fetch model.server) (Celeste.Assemblage id)
+          (Session.authorize model.session Cmd.none << fetch model.server) (Celeste.Assemblage id)
         Just Routing.Composers ->
-          (authorized << fetch model.server) Celeste.Composers
-        _ -> Cmd.none
+          (Session.authorize model.session Cmd.none << fetch model.server) Celeste.Composers
+        _ ->
+          Cmd.none
   in ( newModel, fetchCmd )

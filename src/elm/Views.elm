@@ -1,4 +1,4 @@
-module Views exposing (root, notFound,
+module Views exposing (root, notFound, statsView,
                        tagLabel, tagsRow, navLink)
 
 import Html exposing (Html, Attribute, span, text, small, h1, p, div, a, code)
@@ -6,7 +6,8 @@ import Html.Attributes exposing (class, href)
 import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
 
-import Models.Tag as Tag exposing (Tag)
+import Models.Tag exposing (Tag)
+import Session exposing (User)
 import Routing
 import Messages
 
@@ -34,7 +35,7 @@ navLink : Routing.Route -> List (Attribute Messages.Msg) -> List (Html Messages.
 navLink route =
   let
     string = Routing.routeToString route
-    options = { stopPropagation = True, preventDefault = True }
+    options = { stopPropagation = False, preventDefault = True }
     on = onWithOptions "click" options (JD.succeed << Messages.SetRoute <| route)
   in (a << (::) (href string) << (::) on)
 
@@ -47,9 +48,8 @@ tagsRow tags =
   if List.isEmpty tags then
     []
   else
-    [ small []
-      (
-        text "tags: "
-        :: (List.map tagLabel tags)
-      )
-    ]
+    [small [] (text "tags: " :: List.map tagLabel tags)]
+
+statsView : a -> Html msg
+statsView user =
+  text "hi"
