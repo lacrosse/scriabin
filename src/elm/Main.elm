@@ -16,7 +16,7 @@ import Dict
 import Json.Decode as JD
 
 import Components.Html exposing (data, aria)
-import Components.FontAwesome exposing (faText)
+import Components.FontAwesome exposing (fa, faText)
 import Components.Flash as Flash
 import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
 import Components.Player as Player
@@ -30,6 +30,7 @@ import Views exposing (..)
 import Session exposing (Session)
 import Store exposing (Store)
 import Messages exposing (..)
+import I18n exposing (t)
 
 main : Program Flags Model Msg
 main =
@@ -48,6 +49,7 @@ type alias Flags =
 
 type alias Model =
   { routing : Routing.Model
+  , language : I18n.Language
   , flash : Flash.Model
   , session : Session.Model
   , server : String
@@ -61,6 +63,7 @@ init { token } navLoc =
     serverRoot = navLoc.origin
     preModel =
       { routing = Routing.initialModel
+      , language = I18n.Russian
       , session = Session.initialModel token
       , flash = Flash.initialModel
       , server = serverRoot ++ "/api"
@@ -126,10 +129,10 @@ subscriptions model =
 -- VIEW
 
 template : Model -> List (Html Msg)
-template { routing, store, session, server } =
+template { language, routing, store, session, server } =
   case routing.currentRoute of
     Just Routing.Root ->
-      root server
+      root server language
     Just Routing.NewSession ->
       newSessionView session
     Just Routing.Stats ->
@@ -142,7 +145,7 @@ template { routing, store, session, server } =
     Just (Routing.Assemblage id _) ->
       case Dict.get id store.assemblages of
         Just assemblage ->
-          assemblageView assemblage store
+          assemblageView language assemblage store
         Nothing ->
           [notFound]
     Nothing ->
@@ -193,29 +196,29 @@ compositionRowView : Assemblage -> Html Msg
 compositionRowView a =
   p [] [ assemblageLink a ]
 
-assemblageView : Assemblage -> Store -> List (Html Msg)
-assemblageView assemblage store =
+assemblageView : I18n.Language -> Assemblage -> Store -> List (Html Msg)
+assemblageView language assemblage store =
   case assemblage.kind of
     Assemblage.Person ->
-      personView assemblage store
+      personView language assemblage store
     Assemblage.Composition ->
       compositionView assemblage store
     Assemblage.Recording ->
       performanceView assemblage store
     Assemblage.General ->
-      personView assemblage store
+      personView language assemblage store
 
 assemblageRow : Assemblage -> Html Msg
 assemblageRow a =
   tr [] [ td [] [ assemblageLink a ] ]
 
-assemblageTable : String -> List Assemblage -> List (Html Msg)
+assemblageTable : List (Html Msg) -> List Assemblage -> List (Html Msg)
 assemblageTable name assemblages =
   if List.isEmpty assemblages then
     []
   else
     [ table [ class "table" ]
-      [ thead [] [ tr [] [ th [] [ text name ] ] ]
+      [ thead [] [ tr [] [ th [] name ] ]
       , tbody [] (List.map assemblageRow assemblages)
       ]
     ]
@@ -263,8 +266,8 @@ prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
 prependAndEnumerateLinks str =
   (::) (text (str ++ " ")) << enumerateHuman << List.map assemblageLink
 
-personView : Assemblage -> Store -> List (Html Msg)
-personView assemblage store =
+personView : I18n.Language -> Assemblage -> Store -> List (Html Msg)
+personView language assemblage store =
   let
     header =
       [ h1 [] [ text assemblage.name ]
@@ -284,9 +287,9 @@ personView assemblage store =
   in
     header
     ++ (fileTable files)
-    ++ (assemblageTable "Performances" performances)
-    ++ (assemblageTable "Compositions" compositions)
-    ++ (assemblageTable "Reconstructions of other composers' works" reconstructions)
+    ++ (assemblageTable (t language I18n.Performances) performances)
+    ++ (assemblageTable (t language I18n.Compositions) compositions)
+    ++ (assemblageTable [ text "Reconstructions of other composers' works" ] reconstructions)
 
 compositionHeader : Store -> Bool -> Assemblage -> ( List (Html Msg), List Tag )
 compositionHeader store h1Link assemblage =
@@ -350,7 +353,7 @@ compositionView assemblage store =
   in
     header
     ++ (tagsRow tags)
-    ++ (assemblageTable "Performances" recordings)
+    ++ (assemblageTable [ text "Performances" ] recordings)
     ++ (fileTable compositionFiles)
 
 performanceView : Assemblage -> Store -> List (Html Msg)
@@ -398,7 +401,7 @@ view model =
     authenticatedItems =
       case model.session of
         Session.Present _ ->
-          [ li [] [ navLink Routing.Composers [] [ text "Composers" ] ]
+          [ li [] [ navLink Routing.Composers [] (t model.language I18n.Composers) ]
           ]
         Session.Blank _ ->
           []
@@ -414,9 +417,15 @@ view model =
               )
               (faText "user-circle-o" username)
             , ul [ class "dropdown-menu" ]
-              [ li [] [ navLink Routing.Stats [] (faText "bar-chart" "Stats") ]
+              [ li []
+                [ navLink Routing.Stats []
+                  (fa "bar-chart" :: t model.language I18n.Stats)
+                ]
               , li [ class "divider", attribute "role" "separator" ] []
-              , li [] [ a [ href "#", onClick (SessionMsg Session.SignOut) ] (faText "sign-out" "Sign Out") ]
+              , li []
+                [ a [ href "#", onClick (SessionMsg Session.SignOut) ]
+                  (fa "sign-out" :: t model.language I18n.SignOut)
+                ]
               ]
             ]
         Session.Blank _ ->
@@ -440,7 +449,19 @@ view model =
     footer_ =
       footer [ class "container" ]
         [ hr [] []
-        , text ""
+        , div [ class "container" ]
+          [ ul [ class "nav nav-pills" ]
+            [ li [ attribute "role" "presentation", class "dropdown" ]
+              [ a
+                ( [class "dropdown-toggle", href "#", attribute "role" "button"]
+                  ++ data [("toggle", "dropdown")]
+                  ++ aria [("haspopup", "true"), ("expanded", "false")])
+                [text "Dropdown ", span [ class "caret" ] []]
+              , ul [ class "dropdown-menu" ]
+                [ text "qvb" ]
+              ]
+            ]
+          ]
         ]
     player = List.map (Html.map PlayerMsg) (Player.view model.player)
   in div [] (navbar :: mainContainer :: footer_ :: player)

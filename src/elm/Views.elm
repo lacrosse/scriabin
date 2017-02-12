@@ -1,7 +1,7 @@
 module Views exposing (root, notFound, statsView,
                        tagLabel, tagsRow, navLink)
 
-import Html exposing (Html, Attribute, span, text, small, h1, p, div, a, code)
+import Html exposing (Html, Attribute, span, text, small, h1, p, div, a)
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
@@ -10,18 +10,15 @@ import Models.Tag exposing (Tag)
 import Session exposing (User)
 import Routing
 import Messages
+import I18n exposing (..)
 
 -- VIEW
 
-root : String -> List (Html msg)
-root server =
-  [ h1 [] [ text "Welcome!" ]
-  , p []
-    [ text "I am Scriabin, a web client for Celeste. You are connected to "
-    , code [] [ text server ]
-    , text ". I will be your personal attendant for today."
-    ]
-  , p [] [ text "There is no reason to panic." ]
+root : String -> Language -> List (Html msg)
+root server language =
+  [ h1 [] (t language Welcome)
+  , p [] (t language (YouAreConnectedTo server))
+  , p [] (t language NoReasonToPanic)
   ]
 
 notFound : Html msg
