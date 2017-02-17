@@ -14,6 +14,7 @@ type Sentence
   | Compositions
   | Performances
   | Stats
+  | SignIn
   | SignOut
 
 t : Language -> Sentence -> List (Html msg)
@@ -28,6 +29,7 @@ t language line =
         Compositions -> [text "Compositions"]
         Performances -> [text "Performances"]
         Stats -> [text "Stats"]
+        SignIn -> [text "Sign In"]
         SignOut -> [text "Sign Out"]
     Russian ->
       case line of
@@ -38,4 +40,5 @@ t language line =
         Compositions -> [text "Композиции"]
         Performances -> [text "Исполнения"]
         Stats -> [text "Статистика"]
-        SignOut -> [text "Выйти"]
+        SignIn -> [text "Вход"]
+        SignOut -> [text "Выход"]

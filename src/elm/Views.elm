@@ -7,7 +7,6 @@ import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
 
 import Models.Tag exposing (Tag)
-import Session exposing (User)
 import Routing
 import Messages
 import I18n exposing (..)
@@ -47,6 +46,6 @@ tagsRow tags =
   else
     [small [] (text "tags: " :: List.map tagLabel tags)]
 
-statsView : a -> Html msg
+statsView : a -> List (Html msg)
 statsView user =
-  text "hi"
+  [text ""]

@@ -63,7 +63,7 @@ init { token } navLoc =
     serverRoot = navLoc.origin
     preModel =
       { routing = Routing.initialModel
-      , language = I18n.Russian
+      , language = I18n.English
       , session = Session.initialModel token
       , flash = Flash.initialModel
       , server = serverRoot ++ "/api"
@@ -134,9 +134,9 @@ template { language, routing, store, session, server } =
     Just Routing.Root ->
       root server language
     Just Routing.NewSession ->
-      newSessionView session
+      newSessionView session language
     Just Routing.Stats ->
-      [statsView session]
+      statsView session
     Just Routing.Composers ->
       let
         assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
@@ -151,11 +151,11 @@ template { language, routing, store, session, server } =
     Nothing ->
       [notFound]
 
-newSessionView : Session -> List (Html Msg)
-newSessionView session =
+newSessionView : Session -> I18n.Language -> List (Html Msg)
+newSessionView session language =
   case session of
     Session.Blank { username, password } ->
-      [ h1 [] [ text "Sign In" ]
+      [ h1 [] (t language I18n.SignIn)
       , horizontalForm SignIn
         [ inputFormGroup "user" "username" "Username" "text" username
           (SessionMsg << Session.UpdateWannabeUsername)
@@ -446,22 +446,12 @@ view model =
         ( Flash.view model.flash
         ++ [ main_ [ attribute "role" "main" ] (template model) ]
         )
+    githubLink rel =
+      [fa "github", a [href ("https://github.com/" ++ rel), target "_blank"] [text rel]]
     footer_ =
       footer [ class "container" ]
         [ hr [] []
-        , div [ class "container" ]
-          [ ul [ class "nav nav-pills" ]
-            [ li [ attribute "role" "presentation", class "dropdown" ]
-              [ a
-                ( [class "dropdown-toggle", href "#", attribute "role" "button"]
-                  ++ data [("toggle", "dropdown")]
-                  ++ aria [("haspopup", "true"), ("expanded", "false")])
-                [text "Dropdown ", span [ class "caret" ] []]
-              , ul [ class "dropdown-menu" ]
-                [ text "qvb" ]
-              ]
-            ]
-          ]
+        , p [] (githubLink "lacrosse/scriabin" ++ [text " "] ++ githubLink "lacrosse/celeste")
         ]
     player = List.map (Html.map PlayerMsg) (Player.view model.player)
   in div [] (navbar :: mainContainer :: footer_ :: player)
