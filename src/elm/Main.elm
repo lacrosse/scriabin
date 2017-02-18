@@ -115,7 +115,11 @@ update msg model =
         (model__, redirect) = update (SetRoute Routing.Root) model_
       in (model__, Cmd.batch [sessionCmd, redirect])
     SignInFail error ->
-      (update << FlashMsg << Flash.DeriveFromString << toString) error model
+      case error of
+        Http.BadStatus resp ->
+          (update << FlashMsg << Flash.DeriveFromResponse) resp model
+        _ ->
+          (model, Cmd.none)
     StoreRecords tuple ->
       let (updatedStore, cmd) = Store.update tuple model.store
       in ({ model | store = updatedStore }, cmd)
@@ -458,18 +462,16 @@ view model =
 
 -- FUNCTIONS
 
-handleCelesteResponse : Result Jwt.JwtError Celeste.Response -> Msg
-handleCelesteResponse response =
-  case response of
-    Ok cResp ->
-      (StoreRecords << Celeste.responseToTuple) cResp
-    Err (Jwt.HttpError (Http.BadPayload err _)) ->
-      (FlashMsg << Flash.DeriveFromString) err
-    _ ->
-      Noop
-
 fetch : String -> Celeste.Route -> String -> Cmd Msg
-fetch = Store.fetch handleCelesteResponse
+fetch =
+  Store.fetch <| \response ->
+    case response of
+      Ok value ->
+        (StoreRecords << Celeste.responseToTuple) value
+      Err (Jwt.HttpError (Http.BadPayload err _)) ->
+        (FlashMsg << Flash.DeriveFromString) err
+      _ ->
+        Noop
 
 processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
 processLocation navLoc model =
