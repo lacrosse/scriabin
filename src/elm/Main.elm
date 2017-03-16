@@ -25,6 +25,7 @@ import Models.Assembly as Assembly exposing (Assembly)
 import Models.File as File exposing (File)
 import Models.Tag as Tag exposing (Tag)
 import Routing
+import Server
 import Celeste
 import Views exposing (..)
 import Session exposing (Session)
@@ -52,8 +53,7 @@ type alias Model =
   , language : I18n.Language
   , flash : Flash.Model
   , session : Session.Model
-  , server : String
-  , store : Store.Model
+  , server : Server.Model
   , player : Player.Model
   }
 
@@ -66,8 +66,7 @@ init { token } navLoc =
       , language = I18n.English
       , session = Session.initialModel token
       , flash = Flash.initialModel
-      , server = serverRoot ++ "/api"
-      , store = Store.initialModel
+      , server = Server.initialModel serverRoot
       , player = Player.initialModel
       }
     (model, navCmd) = processLocation navLoc preModel
@@ -86,8 +85,11 @@ update msg model =
       let (updatedSession, cmd) = Session.update msg model.session
       in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     PlayerMsg msg ->
-      let (updatedPlayer, cmd) = Player.update msg model.player model.server
+      let (updatedPlayer, cmd) = Player.update msg model.player model.server.endpoint
       in ({ model | player = updatedPlayer }, Cmd.map PlayerMsg cmd)
+    ServerMsg msg ->
+      let (updatedServer, cmd) = Server.update msg model.server
+      in ({ model | server = updatedServer }, Cmd.map ServerMsg cmd)
     SetRoute route ->
       ( model, Navigation.newUrl (Routing.routeToString route) )
     VisitLocation navLoc ->
@@ -101,7 +103,7 @@ update msg model =
           case model.session of
             Session.Blank wannabe ->
               wannabe
-                |> Session.signIn model.server
+                |> Session.signIn model.server.endpoint
                 |> Http.send (\result ->
                   case result of
                     Ok user -> SignInSucceed user
@@ -120,9 +122,6 @@ update msg model =
           (update << FlashMsg << Flash.DeriveFromResponse) resp model
         _ ->
           (model, Cmd.none)
-    StoreRecords tuple ->
-      let (updatedStore, cmd) = Store.update tuple model.store
-      in ({ model | store = updatedStore }, cmd)
 
 -- SUB
 
@@ -133,24 +132,32 @@ subscriptions model =
 -- VIEW
 
 template : Model -> List (Html Msg)
-template { language, routing, store, session, server } =
+template { language, routing, session, server } =
   case routing.currentRoute of
     Just Routing.Root ->
-      root server language
+      root server.endpoint language
     Just Routing.NewSession ->
       newSessionView session language
     Just Routing.Stats ->
       statsView session
     Just Routing.Composers ->
-      let
-        assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
-        assemblages = (List.sortBy .name << List.map Tuple.second << Dict.toList) assemblagesStore
-      in assemblagesView assemblages
+      case server.state of
+        Server.Connected { store } ->
+          let
+            assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
+            assemblages = (List.sortBy .name << List.map Tuple.second << Dict.toList) assemblagesStore
+          in assemblagesView assemblages
+        Server.Disconnected ->
+          [notFound]
     Just (Routing.Assemblage id _) ->
-      case Dict.get id store.assemblages of
-        Just assemblage ->
-          assemblageView language assemblage store
-        Nothing ->
+      case server.state of
+        Server.Connected { store } ->
+          case Dict.get id store.assemblages of
+            Just assemblage ->
+              assemblageView language assemblage store
+            Nothing ->
+              [notFound]
+        Server.Disconnected ->
           [notFound]
     Nothing ->
       [notFound]
@@ -453,7 +460,7 @@ fetch =
   Store.fetch <| \response ->
     case response of
       Ok value ->
-        (StoreRecords << Celeste.responseToTuple) value
+        (ServerMsg << Server.StoreRecords << Celeste.responseToTuple) value
       Err (Jwt.HttpError (Http.BadPayload err _)) ->
         (FlashMsg << Flash.DeriveFromString) err
       _ ->
@@ -467,9 +474,9 @@ processLocation navLoc model =
     fetchCmd =
       case route of
         Just (Routing.Assemblage id _) ->
-          (Session.authorize model.session Cmd.none << fetch model.server) (Celeste.Assemblage id)
+          (Session.authorize model.session Cmd.none << fetch model.server.endpoint) (Celeste.Assemblage id)
         Just Routing.Composers ->
-          (Session.authorize model.session Cmd.none << fetch model.server) Celeste.Composers
+          (Session.authorize model.session Cmd.none << fetch model.server.endpoint) Celeste.Composers
         _ ->
           Cmd.none
   in ( newModel, fetchCmd )
