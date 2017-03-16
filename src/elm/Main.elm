@@ -128,7 +128,7 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.batch [ Sub.map PlayerMsg (Player.subscriptions model.player) ]
+  Sub.batch [Sub.map PlayerMsg (Player.subscriptions model.player)]
 
 -- VIEW
 
@@ -177,40 +177,32 @@ newSessionView session language =
       [ h1 [] [ text "You are signed in." ] ]
 
 assemblagesView : List Assemblage -> List (Html Msg)
-assemblagesView list =
-  [div [] (List.map assemblageRowView list)]
+assemblagesView = flip (::) [] << div [] << List.map assemblageRowView
 
 assemblageLink : Assemblage -> Html Msg
 assemblageLink assemblage =
   navLink (Routing.Assemblage assemblage.id (Assemblage.toUrlSlug assemblage)) [] [ text assemblage.name ]
 
 assemblageRowView : Assemblage -> Html Msg
-assemblageRowView a =
-  p [] [ assemblageLink a ]
-
-wikipediaPath : String -> String
-wikipediaPath name =
-  let
-    base = "https://en.wikipedia.org/wiki/"
-    wikify = Regex.replace Regex.All (Regex.regex " ") (always "_")
-    articleName = wikify name
-  in base ++ articleName
+assemblageRowView a = p [] [ assemblageLink a ]
 
 compositionRowView : Assemblage -> Html Msg
-compositionRowView a =
-  p [] [ assemblageLink a ]
+compositionRowView = assemblageRowView
+
+wikipediaPath : String -> String
+wikipediaPath = (++) "https://en.wikipedia.org/wiki/" << Regex.replace Regex.All (Regex.regex " ") (always "_")
 
 assemblageView : I18n.Language -> Assemblage -> Store -> List (Html Msg)
-assemblageView language assemblage store =
+assemblageView language assemblage =
   case assemblage.kind of
     Assemblage.Person ->
-      personView language assemblage store
+      personView language assemblage
     Assemblage.Composition ->
-      compositionView assemblage store
+      compositionView assemblage
     Assemblage.Recording ->
-      performanceView assemblage store
+      performanceView assemblage
     Assemblage.General ->
-      personView language assemblage store
+      personView language assemblage
 
 assemblageRow : Assemblage -> Html Msg
 assemblageRow a =
@@ -267,8 +259,7 @@ enumerateHuman list =
       [head, text ", "] ++ enumerateHuman tail
 
 prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
-prependAndEnumerateLinks str =
-  (::) (text (str ++ " ")) << enumerateHuman << List.map assemblageLink
+prependAndEnumerateLinks = flip (<<) (enumerateHuman << List.map assemblageLink) << (::) << text << flip (++) " "
 
 personView : I18n.Language -> Assemblage -> Store -> List (Html Msg)
 personView language assemblage store =
@@ -353,12 +344,7 @@ compositionView assemblage store =
     (header, tags) = compositionHeader store False assemblage
     recordings =
       assemblagesThroughAssemblies assemblage store .assemblageId .childAssemblageId Assembly.Recorded Assemblage.Recording
-    compositionFiles = []
-  in
-    header
-    ++ (tagsRow tags)
-    ++ (assemblageTable [ text "Performances" ] recordings)
-    ++ (fileTable compositionFiles)
+  in List.concat [header, tagsRow tags, assemblageTable [text "Performances"] recordings, fileTable []]
 
 performanceView : Assemblage -> Store -> List (Html Msg)
 performanceView assemblage store =
@@ -455,7 +441,7 @@ view model =
     footer_ =
       footer [ class "container" ]
         [ hr [] []
-        , p [] (githubLink "lacrosse/scriabin" ++ [text " "] ++ githubLink "lacrosse/celeste")
+        , p [] ([text "Powered by "] ++ githubLink "lacrosse/scriabin" ++ [text " and "] ++ githubLink "lacrosse/celeste")
         ]
     player = List.map (Html.map PlayerMsg) (Player.view model.player)
   in div [] (navbar :: mainContainer :: footer_ :: player)
