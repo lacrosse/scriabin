@@ -28,7 +28,6 @@ import Routing
 import Server
 import Celeste
 import Views exposing (..)
-import Session exposing (Session)
 import Store exposing (Store)
 import Messages exposing (..)
 import I18n exposing (t)
@@ -52,7 +51,6 @@ type alias Model =
   { routing : Routing.Model
   , language : I18n.Language
   , flash : Flash.Model
-  , session : Session.Model
   , server : Server.Model
   , player : Player.Model
   }
@@ -60,16 +58,14 @@ type alias Model =
 init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
 init { token } navLoc =
   let
-    serverRoot = navLoc.origin
-    preModel =
+    model_ =
       { routing = Routing.initialModel
       , language = I18n.English
-      , session = Session.initialModel token
       , flash = Flash.initialModel
-      , server = Server.initialModel serverRoot
+      , server = Server.initialModel navLoc.origin token
       , player = Player.initialModel
       }
-    (model, navCmd) = processLocation navLoc preModel
+    (model, navCmd) = processLocation navLoc model_
   in (model, navCmd)
 
 -- UPDATE
@@ -81,9 +77,6 @@ update msg model =
     FlashMsg msg ->
       let (updatedFlash, cmd) = Flash.update msg model.flash
       in ( { model | flash = updatedFlash }, Cmd.map FlashMsg cmd )
-    SessionMsg msg ->
-      let (updatedSession, cmd) = Session.update msg model.session
-      in ( { model | session = updatedSession }, Cmd.map SessionMsg cmd )
     PlayerMsg msg ->
       let (updatedPlayer, cmd) = Player.update msg model.player model.server.endpoint
       in ({ model | player = updatedPlayer }, Cmd.map PlayerMsg cmd)
@@ -100,22 +93,22 @@ update msg model =
     SignIn ->
       let
         cmd =
-          case model.session of
-            Session.Blank wannabe ->
+          case model.server.state of
+            Server.Disconnected wannabe ->
               wannabe
-                |> Session.signIn model.server.endpoint
+                |> Server.signIn model.server.endpoint
                 |> Http.send (\result ->
                   case result of
                     Ok user -> SignInSucceed user
                     Err error -> SignInFail error)
-            Session.Present _ ->
+            Server.Connected _ _ ->
               Cmd.none
       in (model, cmd)
     SignInSucceed user ->
       let
-        (model_, sessionCmd) = update (SessionMsg (Session.SignInSucceed user)) model
+        (model_, serverCmd) = update (ServerMsg (Server.SignInSucceed user)) model
         (model__, redirect) = update (SetRoute Routing.Root) model_
-      in (model__, Cmd.batch [sessionCmd, redirect])
+      in (model__, Cmd.batch [serverCmd, redirect])
     SignInFail error ->
       case error of
         Http.BadStatus resp ->
@@ -132,47 +125,47 @@ subscriptions model =
 -- VIEW
 
 template : Model -> List (Html Msg)
-template { language, routing, session, server } =
+template { language, routing, server } =
   case routing.currentRoute of
     Just Routing.Root ->
       root server.endpoint language
     Just Routing.NewSession ->
-      newSessionView session language
+      newSessionView server language
     Just Routing.Stats ->
-      statsView session
+      statsView server
     Just Routing.Composers ->
       case server.state of
-        Server.Connected { store } ->
+        Server.Connected _ store ->
           let
             assemblagesStore = Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
             assemblages = (List.sortBy .name << List.map Tuple.second << Dict.toList) assemblagesStore
           in assemblagesView assemblages
-        Server.Disconnected ->
+        Server.Disconnected _ ->
           [notFound]
     Just (Routing.Assemblage id _) ->
       case server.state of
-        Server.Connected { store } ->
+        Server.Connected _ store ->
           case Dict.get id store.assemblages of
             Just assemblage ->
               assemblageView language assemblage store
             Nothing ->
               [notFound]
-        Server.Disconnected ->
+        Server.Disconnected _ ->
           [notFound]
     Nothing ->
       [notFound]
 
-newSessionView : Session -> I18n.Language -> List (Html Msg)
-newSessionView session language =
-  case session of
-    Session.Blank { username, password } ->
+newSessionView : Server.Model -> I18n.Language -> List (Html Msg)
+newSessionView { state } language =
+  case state of
+    Server.Disconnected { username, password } ->
       [ h1 [] (t language I18n.SignIn)
       , horizontalForm SignIn
         [ inputFormGroup "user" "username" "Username" "text" username
-          (SessionMsg << Session.UpdateWannabeUsername)
+          (ServerMsg << Server.UpdateWannabeUsername)
           [ placeholder "seanbooth" ]
         , inputFormGroup "user" "password" "Password" "password" password
-          (SessionMsg << Session.UpdateWannabePassword)
+          (ServerMsg << Server.UpdateWannabePassword)
           [ placeholder "6IE.CR" ]
         , div [ class "form-group" ]
           [ div [ class "col-lg-10 col-lg-offset-2" ]
@@ -180,7 +173,7 @@ newSessionView session language =
           ]
         ]
       ]
-    Session.Present _ ->
+    Server.Connected _ _ ->
       [ h1 [] [ text "You are signed in." ] ]
 
 assemblagesView : List Assemblage -> List (Html Msg)
@@ -396,16 +389,16 @@ view model =
         , navLink Routing.Root [ class "navbar-brand" ] [ text "Celeste" ]
         ]
     authenticatedItems =
-      case model.session of
-        Session.Present _ ->
+      case model.server.state of
+        Server.Connected _ _ ->
           [ li [] [ navLink Routing.Composers [] (t model.language I18n.Composers) ]
           ]
-        Session.Blank _ ->
+        Server.Disconnected _ ->
           []
     leftNav = [ ul [ class "nav navbar-nav" ] authenticatedItems ]
     sessionNav =
-      case model.session of
-        Session.Present { username } ->
+      case model.server.state of
+        Server.Connected { username } _ ->
           li [ class "dropdown" ]
             [ a
               ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
@@ -420,12 +413,12 @@ view model =
                 ]
               , li [ class "divider", attribute "role" "separator" ] []
               , li []
-                [ a [ href "#", onClick (SessionMsg Session.SignOut) ]
+                [ a [ href "#", onClick (ServerMsg Server.SignOut) ]
                   (fa "sign-out" :: t model.language I18n.SignOut)
                 ]
               ]
             ]
-        Session.Blank _ ->
+        Server.Disconnected _ ->
           li []
             [ navLink Routing.NewSession [] (faText "sign-in" "Sign In")
             ]
@@ -443,12 +436,12 @@ view model =
         ( Flash.view model.flash
         ++ [ main_ [ attribute "role" "main" ] (template model) ]
         )
-    githubLink rel =
-      [fa "github", a [href ("https://github.com/" ++ rel), target "_blank"] [text rel]]
+    githubLink user repo =
+      [fa "github", a [href ("https://github.com/" ++ user ++ "/" ++ repo), target "_blank"] [text repo]]
     footer_ =
       footer [ class "container" ]
         [ hr [] []
-        , p [] ([text "Powered by "] ++ githubLink "lacrosse/scriabin" ++ [text " and "] ++ githubLink "lacrosse/celeste")
+        , p [] ([text "Powered by "] ++ githubLink "lacrosse" "scriabin" ++ [text " and "] ++ githubLink "lacrosse" "celeste")
         ]
     player = List.map (Html.map PlayerMsg) (Player.view model.player)
   in div [] (navbar :: mainContainer :: footer_ :: player)
@@ -474,9 +467,9 @@ processLocation navLoc model =
     fetchCmd =
       case route of
         Just (Routing.Assemblage id _) ->
-          (Session.authorize model.session Cmd.none << fetch model.server.endpoint) (Celeste.Assemblage id)
+          (Server.authorize model.server Cmd.none << fetch model.server.endpoint) (Celeste.Assemblage id)
         Just Routing.Composers ->
-          (Session.authorize model.session Cmd.none << fetch model.server.endpoint) Celeste.Composers
+          (Server.authorize model.server Cmd.none << fetch model.server.endpoint) Celeste.Composers
         _ ->
           Cmd.none
   in ( newModel, fetchCmd )

@@ -51,7 +51,7 @@ jsonDecoder : JD.Decoder Assemblage
 jsonDecoder =
   let
     maybeList key =
-      (JD.map (Maybe.withDefault []) << JD.maybe << JD.field key << JD.list)
+      JD.map (Maybe.withDefault []) << JD.maybe << JD.field key << JD.list
   in
     JD.map5 Assemblage
       (JD.field "id" JD.int)

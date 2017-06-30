@@ -1,6 +1,5 @@
 module Messages exposing (..)
 
-import Session
 import Http
 import Components.Flash as Flash
 import Routing
@@ -11,9 +10,8 @@ import Components.Player as Player
 type Msg
   = Noop
   | SignIn
-  | SignInSucceed Session.User
+  | SignInSucceed Server.User
   | SignInFail Http.Error
-  | SessionMsg Session.Msg
   | FlashMsg Flash.Msg
   | SetRoute Routing.Route
   | VisitLocation Navigation.Location

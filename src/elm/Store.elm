@@ -39,19 +39,16 @@ initialModel =
 update : Celeste.ResponseTuple -> Model -> ( Model, Cmd msg )
 update (assemblages, assemblies, files, tags) model =
   let
-    old = model
     dictifyById = Dict.fromList << List.map (\a -> (a.id, a))
     dictifyByComposite = Dict.fromList << List.map (\a -> ((a.assemblageId, a.childAssemblageId), a))
-    assemblagesDict = dictifyById assemblages
-    assembliesDict = dictifyByComposite assemblies
-    filesDict = dictifyById files
-    tagsDict = dictifyById tags
-    newAssemblages = Dict.union assemblagesDict old.assemblages
-    newAssemblies = Dict.union assembliesDict old.assemblies
-    newFiles = Dict.union filesDict old.files
-    newTags = Dict.union tagsDict old.tags
-    new = { old | assemblages = newAssemblages, assemblies = newAssemblies, files = newFiles, tags = newTags }
-  in (new, Cmd.none)
+    model_ =
+      { model
+      | assemblages = Dict.union (dictifyById assemblages) model.assemblages
+      , assemblies = Dict.union (dictifyByComposite assemblies) model.assemblies
+      , files = Dict.union (dictifyById files) model.files
+      , tags = Dict.union (dictifyById tags) model.tags
+      }
+  in (model_, Cmd.none)
 
 -- FUNCTIONS
 

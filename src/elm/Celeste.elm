@@ -1,6 +1,7 @@
 module Celeste exposing (..)
 
 import Json.Decode as JD
+import Models.Account
 import Models.Assemblage
 import Models.Assembly
 import Models.File
@@ -11,6 +12,7 @@ import Models.Tag
 type Route
   = Composers
   | Assemblage Int
+  | Account
 
 type Response
   = ComposersResponse (List (Models.Assemblage.Assemblage))
@@ -21,6 +23,7 @@ type Response
     , List Models.File.File
     , List Models.Tag.Tag
     )
+  | AccountResponse (String)
 
 type alias ResponseTuple =
   ( List Models.Assemblage.Assemblage
@@ -38,6 +41,7 @@ route apiBase route =
       case route of
         Composers -> "/composers"
         Assemblage id -> "/assemblages/" ++ (toString id)
+        Account -> "/account"
   in apiBase ++ rel
 
 decoder : Route -> JD.Decoder Response
@@ -55,6 +59,8 @@ decoder route =
             (JD.field "files" (JD.list Models.File.jsonDecoder))
             (JD.field "tags" (JD.list Models.Tag.jsonDecoder))
       in JD.map AssemblageResponse tupleDecoder
+    Account ->
+      JD.map AccountResponse <| Models.Account.jsonDecoder
 
 responseToTuple : Response -> ResponseTuple
 responseToTuple resp =
@@ -63,3 +69,5 @@ responseToTuple resp =
       (assemblage :: assemblages, assemblies, files, tags)
     ComposersResponse assemblages ->
       (assemblages, [], [], [])
+    _ ->
+      ([], [], [], [])
