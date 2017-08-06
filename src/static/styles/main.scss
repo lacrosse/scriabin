@@ -7,10 +7,29 @@ $fa-font-path: '~font-awesome/fonts';
 @import '~font-awesome/scss/font-awesome';
 
 body {
-  font-family: 'PT Serif', serif;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14pt;
   padding-bottom: 50px;
 }
 
 footer {
   padding-bottom: 30px;
+}
+
+a {
+  transition: .1s ease text-shadow;
+  &:hover {
+    text-shadow: 1px 1px 5px transparentize($brand-primary, .7);
+    text-decoration: none;
+  }
+}
+
+h1 {
+  font-size: 6rem;
+}
+
+.table-audio-list {
+  tr td:first-child {
+    width: 70px;
+  }
 }

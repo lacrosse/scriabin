@@ -1,8 +1,7 @@
-module Views exposing (root, notFound, statsView,
-                       tagLabel, tagsRow, navLink)
+module Views exposing (..)
 
 import Html exposing (Html, Attribute, span, text, small, h1, p, div, a)
-import Html.Attributes exposing (class, href)
+import Html.Attributes exposing (class, href, target)
 import Html.Events exposing (onWithOptions)
 import Json.Decode as JD
 
@@ -10,6 +9,7 @@ import Models.Tag exposing (Tag)
 import Routing
 import Messages
 import I18n exposing (..)
+import Components.FontAwesome exposing (fa)
 
 -- VIEW
 
@@ -47,5 +47,10 @@ tagsRow tags =
     [small [] (text "tags: " :: List.map tagLabel tags)]
 
 statsView : a -> List (Html msg)
-statsView user =
-  [text ""]
+statsView user = [text ""]
+
+threeBars : List (Html msg)
+threeBars = List.repeat 3 (span [ class "icon-bar" ] [])
+
+githubLink user repo =
+  [fa "github", a [href ("https://github.com/" ++ user ++ "/" ++ repo), target "_blank"] [text repo]]
