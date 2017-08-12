@@ -316,8 +316,13 @@ view model =
                             ]
 
                     history =
-                        [ li [ class "dropdown-header" ] [ text "history" ] ]
-                            ++ (List.map playlistRow << List.reverse << List.take 2) previous
+                        case previous of
+                            [] ->
+                                []
+
+                            val ->
+                                [ li [ class "dropdown-header" ] [ text "history" ] ]
+                                    ++ (List.map playlistRow << List.reverse << List.take 2) val
 
                     current =
                         [ li [ class "dropdown-header" ] [ text "now playing" ]
@@ -325,8 +330,13 @@ view model =
                         ]
 
                     upcoming =
-                        [ li [ class "dropdown-header" ] [ text "up next" ] ]
-                            ++ List.map playlistRow next
+                        case next of
+                            [] ->
+                                []
+
+                            val ->
+                                [ li [ class "dropdown-header" ] [ text "up next" ] ]
+                                    ++ List.map playlistRow val
 
                     playlist =
                         history ++ current ++ upcoming
