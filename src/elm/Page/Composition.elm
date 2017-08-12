@@ -8,10 +8,11 @@ import Store exposing (Store, assemblagesThroughAssemblies)
 import Data.Assemblage as Assemblage exposing (Assemblage)
 import Data.Assembly as Assembly
 import Messages exposing (Msg)
+import I18n exposing (t)
 
 
-view : Assemblage -> Store -> List (Html Msg)
-view assemblage store =
+view : I18n.Language -> Assemblage -> Store -> List (Html Msg)
+view language assemblage store =
     let
         ( header, tags ) =
             View.Composition.Header.view store False assemblage
@@ -27,5 +28,5 @@ view assemblage store =
     in
         header
             ++ View.Common.tagsRow tags
-            ++ View.Assemblage.table [ text "Performances" ] recordings
+            ++ View.Assemblage.table (t language I18n.Performances) recordings
             ++ View.Common.fileTable []

@@ -14,7 +14,6 @@ import Components.Player as Player
 import Components.FontAwesome exposing (fa)
 import Html exposing (Html, h4, text, table, tr, td, a)
 import Html.Attributes exposing (class, href)
-import Html.Events exposing (onWithOptions)
 import Dict
 import Json.Decode as JD
 import Components.Player

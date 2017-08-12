@@ -26,7 +26,15 @@ import Html
         , td
         , hr
         )
-import Html.Attributes exposing (class, type_, attribute, href, target, placeholder)
+import Html.Attributes
+    exposing
+        ( class
+        , type_
+        , attribute
+        , href
+        , target
+        , placeholder
+        )
 import Html.Events exposing (onClick, onWithOptions)
 import Http
 import Navigation
@@ -44,6 +52,7 @@ import Data.Assemblage as Assemblage exposing (Assemblage)
 import Routing
 import Server
 import Celeste
+import Json.Decode as JD
 import View.Common
     exposing
         ( notFound
@@ -114,6 +123,9 @@ update msg model =
         Noop ->
             ( model, Cmd.none )
 
+        SetLanguage lang ->
+            ( { model | language = lang }, Cmd.none )
+
         FlashMsg msg ->
             let
                 ( updatedFlash, cmd ) =
@@ -135,6 +147,28 @@ update msg model =
             in
                 ( { model | server = updatedServer }, Cmd.map ServerMsg cmd )
 
+        HangUp outcome ->
+            case outcome of
+                Ok ( celesteTuple, route ) ->
+                    let
+                        ( model_, cmd_ ) =
+                            update (ServerMsg (Server.StoreRecords celesteTuple)) model
+
+                        ( model__, cmd__ ) =
+                            update (RoutingMsg (Routing.FinishTransition (Just route))) model_
+                    in
+                        ( model__, Cmd.batch [ cmd_, cmd__ ] )
+
+                Err error ->
+                    let
+                        ( model_, cmd_ ) =
+                            update (FlashMsg (Flash.DeriveFromString error)) model
+
+                        ( model__, cmd__ ) =
+                            update (RoutingMsg (Routing.FinishTransition Nothing)) model_
+                    in
+                        ( model__, Cmd.batch [ cmd_, cmd__ ] )
+
         SetRoute route ->
             ( model, Navigation.newUrl (Routing.routeToString route) )
 
@@ -147,6 +181,13 @@ update msg model =
                     update (FlashMsg Flash.Flush) model_
             in
                 ( model__, Cmd.batch [ fetchCmd, flashCmd ] )
+
+        RoutingMsg msg ->
+            let
+                ( routing_, cmd ) =
+                    Routing.update msg model.routing
+            in
+                ( { model | routing = routing_ }, Cmd.map RoutingMsg cmd )
 
         SignIn ->
             let
@@ -202,8 +243,8 @@ subscriptions model =
 -- VIEW
 
 
-template : Model -> List (Html Msg)
-template { language, routing, server } =
+modelToTemplate : Model -> List (Html Msg)
+modelToTemplate { language, routing, server } =
     case routing.currentRoute of
         Just (Routing.Root) ->
             Page.Root.view server.endpoint language
@@ -299,7 +340,26 @@ wikipediaPath =
 
 view : Model -> Html Msg
 view model =
+    withLayout model (modelToTemplate model)
+
+
+withLayout : Model -> List (Html Msg) -> Html Msg
+withLayout model content =
     let
+        overlay =
+            case model.routing.transitioning of
+                True ->
+                    [ div
+                        [ class "overlay-main" ]
+                        [ div
+                            [ class "la-ball-grid-beat la-dark la-2x overlay-loader" ]
+                            (List.repeat 9 (div [] []))
+                        ]
+                    ]
+
+                False ->
+                    []
+
         navbarHeader =
             div [ class "navbar-header" ]
                 [ button
@@ -313,19 +373,19 @@ view model =
                 , navLink Routing.Root [ class "navbar-brand" ] [ text "Celeste" ]
                 ]
 
-        authenticatedItems =
+        leftNav =
             case model.server.state of
                 Server.Connected _ _ ->
-                    [ li [] [ navLink Routing.Composers [] (t model.language I18n.Composers) ]
+                    [ ul [ class "nav navbar-nav" ]
+                        [ li []
+                            [ navLink Routing.Composers [] (t model.language I18n.Composers) ]
+                        ]
                     ]
 
                 Server.Disconnected _ ->
                     []
 
-        leftNav =
-            [ ul [ class "nav navbar-nav" ] authenticatedItems ]
-
-        sessionNav =
+        rightNavContent =
             case model.server.state of
                 Server.Connected { username } _ ->
                     li [ class "dropdown" ]
@@ -343,6 +403,23 @@ view model =
                                 ]
                             , li [ class "divider", attribute "role" "separator" ] []
                             , li []
+                                (List.map
+                                    (\( lang, desc ) ->
+                                        a
+                                            [ onWithOptions "click"
+                                                { stopPropagation = True
+                                                , preventDefault = True
+                                                }
+                                                (JD.succeed (SetLanguage lang))
+                                            ]
+                                            [ text desc ]
+                                    )
+                                    [ ( I18n.English, "🇺🇸 English" )
+                                    , ( I18n.Russian, "🇷🇺 Russian" )
+                                    ]
+                                )
+                            , li [ class "divider", attribute "role" "separator" ] []
+                            , li []
                                 [ a [ href "#", onClick (ServerMsg Server.SignOut) ]
                                     (fa "sign-out" :: t model.language I18n.SignOut)
                                 ]
@@ -355,7 +432,7 @@ view model =
                         ]
 
         rightNav =
-            [ ul [ class "nav navbar-nav navbar-right" ] [ sessionNav ] ]
+            [ ul [ class "nav navbar-nav navbar-right" ] [ rightNavContent ] ]
 
         navbar =
             nav [ class "navbar navbar-default" ]
@@ -368,61 +445,81 @@ view model =
         mainContainer =
             div [ class "container" ]
                 (Flash.view model.flash
-                    ++ [ main_ [ attribute "role" "main" ] (template model) ]
+                    ++ [ main_ [ attribute "role" "main" ] content ]
                 )
 
         footer_ =
             footer [ class "container" ]
                 [ hr [] []
-                , p [] ([ text "Powered by " ] ++ githubLink "lacrosse" "scriabin" ++ [ text " and " ] ++ githubLink "lacrosse" "celeste")
+                , p []
+                    ([ text "Powered by " ]
+                        ++ githubLink "lacrosse" "scriabin"
+                        ++ [ text " and " ]
+                        ++ githubLink "lacrosse" "celeste"
+                    )
                 ]
 
         player =
             List.map (Html.map PlayerMsg) (Player.view model.player)
     in
-        div [] (navbar :: mainContainer :: footer_ :: player)
+        div [] (overlay ++ navbar :: mainContainer :: footer_ :: player)
 
 
 
 -- FUNCTIONS
 
 
-routeToCelesteRoutes : Routing.Route -> List Celeste.Route
-routeToCelesteRoutes route =
-    case route of
-        Routing.Assemblage id _ ->
-            [ Celeste.Assemblage id ]
-
-        Routing.Composers ->
-            [ Celeste.Composers ]
-
-        _ ->
-            []
-
-
 processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
 processLocation navLoc model =
     let
+        routeToCelesteRoute route =
+            case route of
+                Routing.Assemblage id _ ->
+                    Just (Celeste.Assemblage id)
+
+                Routing.Composers ->
+                    Just Celeste.Composers
+
+                _ ->
+                    Nothing
+
         maybeRoute =
             Routing.locationToRoute navLoc
 
-        respToMsg response =
+        respToMsg route response =
             case response of
                 Ok value ->
-                    (ServerMsg << Server.StoreRecords << Celeste.responseToTuple) value
+                    HangUp (Ok ( Celeste.responseToTuple value, route ))
 
-                Err (Jwt.HttpError (Http.BadPayload err _)) ->
-                    (FlashMsg << Flash.DeriveFromString) err
+                Err err ->
+                    let
+                        string =
+                            case err of
+                                Jwt.HttpError (Http.BadPayload val _) ->
+                                    val
 
-                Err _ ->
-                    Noop
-
-        fetchCmd =
-            case maybeRoute of
-                Just route ->
-                    (Cmd.batch << List.map (Server.authorize model.server Cmd.none << Store.fetch respToMsg model.server.endpoint) << routeToCelesteRoutes) route
-
-                Nothing ->
-                    Cmd.none
+                                error ->
+                                    toString error
+                    in
+                        HangUp (Err string)
     in
-        ( { model | routing = { currentRoute = maybeRoute } }, fetchCmd )
+        case maybeRoute of
+            Just route ->
+                case routeToCelesteRoute route of
+                    Just cRoute ->
+                        let
+                            routing =
+                                model.routing
+
+                            routing_ =
+                                { routing | transitioning = True }
+                        in
+                            ( { model | routing = routing_ }
+                            , Server.authorize model.server Cmd.none (Store.fetch (respToMsg route) model.server.endpoint cRoute)
+                            )
+
+                    Nothing ->
+                        ( { model | routing = { currentRoute = maybeRoute, transitioning = False } }, Cmd.none )
+
+            Nothing ->
+                ( { model | routing = { currentRoute = maybeRoute, transitioning = False } }, Cmd.none )

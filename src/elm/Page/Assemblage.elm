@@ -17,7 +17,7 @@ view language assemblage =
             Page.Person.view language assemblage
 
         Assemblage.Composition ->
-            Page.Composition.view assemblage
+            Page.Composition.view language assemblage
 
         Assemblage.Recording ->
             Page.Performance.view assemblage

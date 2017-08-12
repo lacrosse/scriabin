@@ -300,7 +300,7 @@ view model =
 
             Working state time file previous next ->
                 let
-                    fullPlaylist =
+                    allFiles =
                         List.foldl (::) (file :: next) previous
 
                     playlistRow file =
@@ -310,15 +310,26 @@ view model =
                                     { stopPropagation = True
                                     , preventDefault = True
                                     }
-                                    (JD.succeed (Update fullPlaylist file))
+                                    (JD.succeed (Update allFiles file))
                                 ]
                                 [ text file.name ]
                             ]
 
-                    playlist =
-                        (List.map playlistRow << List.reverse) previous
-                            ++ [ li [ class "disabled" ] [ a [] [ text file.name ] ] ]
+                    history =
+                        [ li [ class "dropdown-header" ] [ text "history" ] ]
+                            ++ (List.map playlistRow << List.reverse << List.take 2) previous
+
+                    current =
+                        [ li [ class "dropdown-header" ] [ text "now playing" ]
+                        , li [ class "disabled" ] [ a [] [ text file.name ] ]
+                        ]
+
+                    upcoming =
+                        [ li [ class "dropdown-header" ] [ text "up next" ] ]
                             ++ List.map playlistRow next
+
+                    playlist =
+                        history ++ current ++ upcoming
                 in
                     [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
                         [ div [ class "container" ]
@@ -345,7 +356,7 @@ view model =
                                                 ]
                                         )
                                         [ fa "list" ]
-                                    , ul [ class "dropdown-menu" ] playlist
+                                    , ul [ class "dropdown-menu dropdown-scrollable" ] playlist
                                     ]
                                 ]
                             ]
@@ -371,16 +382,16 @@ fileTuples file server =
 
 splitList : List a -> a -> ( List a, List a )
 splitList list separator =
-    case list of
-        [] ->
-            ( [], [] )
+    let
+        splitList_ acc list separator =
+            case list of
+                [] ->
+                    ( acc, [] )
 
-        hd :: tl ->
-            if hd == separator then
-                ( [], tl )
-            else
-                let
-                    ( left, right ) =
-                        splitList tl separator
-                in
-                    ( hd :: left, right )
+                hd :: tl ->
+                    if hd == separator then
+                        ( acc, tl )
+                    else
+                        splitList_ (hd :: acc) tl separator
+    in
+        splitList_ [] list separator
