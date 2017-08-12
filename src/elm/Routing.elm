@@ -32,12 +32,16 @@ initialModel =
 
 
 type Msg
-    = FinishTransition (Maybe Route)
+    = StartTransition
+    | FinishTransition (Maybe Route)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        StartTransition ->
+            ( { model | transitioning = True }, Cmd.none )
+
         FinishTransition mRoute ->
             case mRoute of
                 Just route ->

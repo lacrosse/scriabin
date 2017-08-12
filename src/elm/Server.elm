@@ -123,14 +123,14 @@ update msg model =
 -- MESSAGES
 
 
-authorize : Model -> a -> (String -> a) -> a
-authorize { state } none function =
+authorize : Model -> (String -> a) -> Maybe a
+authorize { state } function =
     case state of
         Connected { jwt } _ ->
-            function jwt
+            Just (function jwt)
 
         Disconnected _ ->
-            none
+            Nothing
 
 
 

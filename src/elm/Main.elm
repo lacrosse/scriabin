@@ -508,15 +508,21 @@ processLocation navLoc model =
                 case routeToCelesteRoute route of
                     Just cRoute ->
                         let
-                            routing =
-                                model.routing
-
-                            routing_ =
-                                { routing | transitioning = True }
+                            mCmd =
+                                Server.authorize
+                                    model.server
+                                    (Store.fetch (respToMsg route) model.server.endpoint cRoute)
                         in
-                            ( { model | routing = routing_ }
-                            , Server.authorize model.server Cmd.none (Store.fetch (respToMsg route) model.server.endpoint cRoute)
-                            )
+                            case mCmd of
+                                Just cmd ->
+                                    let
+                                        ( model_, routingCmd ) =
+                                            update (RoutingMsg Routing.StartTransition) model
+                                    in
+                                        ( model_, Cmd.batch [ routingCmd, cmd ] )
+
+                                Nothing ->
+                                    ( model, Cmd.none )
 
                     Nothing ->
                         ( { model | routing = { currentRoute = maybeRoute, transitioning = False } }, Cmd.none )
