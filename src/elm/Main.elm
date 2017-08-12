@@ -35,35 +35,39 @@ import Html.Attributes
         , target
         , placeholder
         )
-import Html.Events exposing (onClick, onWithOptions)
+import Html.Events
+    exposing
+        ( onClick
+        , onWithOptions
+        )
 import Http
 import Navigation
-import Regex
 import Jwt
 import Dict
 import Page.Root
+import Page.NotFound
 import Page.Assemblage
-import Components.Html exposing (data, aria)
-import Components.FontAwesome exposing (fa, faText)
+import Page.Assemblages
+import Page.NewSession
+import Page.Stats
+import Components.Html exposing (..)
+import Components.FontAwesome exposing (..)
 import Components.Flash as Flash
-import Components.Bootstrap exposing (horizontalForm, inputFormGroup)
 import Components.Player as Player
-import Data.Assemblage as Assemblage exposing (Assemblage)
+import Data.Assemblage exposing (Assemblage)
 import Routing
 import Server
 import Celeste
 import Json.Decode as JD
 import View.Common
     exposing
-        ( notFound
-        , statsView
-        , tagLabel
+        ( tagLabel
         , tagsRow
         , navLink
         , threeBars
         , githubLink
         )
-import Store exposing (Store, assemblagesThroughAssemblies)
+import Store
 import Messages exposing (..)
 import I18n exposing (t)
 
@@ -243,32 +247,32 @@ subscriptions model =
 -- VIEW
 
 
-modelToTemplate : Model -> List (Html Msg)
-modelToTemplate { language, routing, server } =
+modelToPage : Model -> List (Html Msg)
+modelToPage { language, routing, server } =
     case routing.currentRoute of
         Just (Routing.Root) ->
             Page.Root.view server.endpoint language
 
         Just (Routing.NewSession) ->
-            newSessionView server language
+            Page.NewSession.view server language
 
         Just (Routing.Stats) ->
-            statsView server
+            Page.Stats.view server
 
         Just (Routing.Composers) ->
             case server.state of
                 Server.Connected _ store ->
                     let
                         assemblagesStore =
-                            Dict.filter (\_ a -> Assemblage.isComposer a) store.assemblages
+                            Dict.filter (\_ a -> Data.Assemblage.isComposer a) store.assemblages
 
                         assemblages =
                             (List.sortBy .name << List.map Tuple.second << Dict.toList) assemblagesStore
                     in
-                        assemblagesView assemblages
+                        Page.Assemblages.view assemblages
 
                 Server.Disconnected _ ->
-                    [ notFound ]
+                    Page.NotFound.view
 
         Just (Routing.Assemblage id _) ->
             case server.state of
@@ -278,69 +282,18 @@ modelToTemplate { language, routing, server } =
                             Page.Assemblage.view language assemblage store
 
                         Nothing ->
-                            [ notFound ]
+                            Page.NotFound.view
 
                 Server.Disconnected _ ->
-                    [ notFound ]
+                    Page.NotFound.view
 
         Nothing ->
-            [ notFound ]
-
-
-newSessionView : Server.Model -> I18n.Language -> List (Html Msg)
-newSessionView { state } language =
-    case state of
-        Server.Disconnected { username, password } ->
-            [ h1 [] (t language I18n.SignIn)
-            , horizontalForm SignIn
-                [ inputFormGroup "user"
-                    "username"
-                    "Username"
-                    "text"
-                    username
-                    (ServerMsg << Server.UpdateWannabeUsername)
-                    [ placeholder "seanbooth" ]
-                , inputFormGroup "user"
-                    "password"
-                    "Password"
-                    "password"
-                    password
-                    (ServerMsg << Server.UpdateWannabePassword)
-                    [ placeholder "6IE.CR" ]
-                , div [ class "form-group" ]
-                    [ div [ class "col-lg-10 col-lg-offset-2" ]
-                        [ button [ type_ "submit", class "btn btn-primary" ] (faText "sign-in" "Sign In") ]
-                    ]
-                ]
-            ]
-
-        Server.Connected _ _ ->
-            [ h1 [] [ text "You are signed in." ] ]
-
-
-assemblagesView : List Assemblage -> List (Html Msg)
-assemblagesView =
-    flip (::) [] << div [] << List.map assemblageRowView
-
-
-assemblageRowView : Assemblage -> Html Msg
-assemblageRowView =
-    p [] << List.singleton << View.Common.assemblageLink
-
-
-compositionRowView : Assemblage -> Html Msg
-compositionRowView =
-    assemblageRowView
-
-
-wikipediaPath : String -> String
-wikipediaPath =
-    (++) "https://en.wikipedia.org/wiki/" << Regex.replace Regex.All (Regex.regex " ") (always "_")
+            Page.NotFound.view
 
 
 view : Model -> Html Msg
 view model =
-    withLayout model (modelToTemplate model)
+    withLayout model (modelToPage model)
 
 
 withLayout : Model -> List (Html Msg) -> Html Msg

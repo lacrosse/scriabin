@@ -31,18 +31,6 @@ import Components.Player as Player
 -- VIEW
 
 
-notFound : Html msg
-notFound =
-    let
-        h =
-            h1 [] [ text "Not found" ]
-
-        par =
-            p [] [ text "Try again." ]
-    in
-        div [] [ h, par ]
-
-
 navLink : Routing.Route -> List (Attribute Messages.Msg) -> List (Html Messages.Msg) -> Html Messages.Msg
 navLink route =
     let
@@ -69,11 +57,6 @@ tagsRow tags =
         []
     else
         [ small [] (text "tags: " :: List.map tagLabel tags) ]
-
-
-statsView : a -> List (Html msg)
-statsView user =
-    [ text "" ]
 
 
 threeBars : List (Html msg)
