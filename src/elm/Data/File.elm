@@ -1,4 +1,4 @@
-module Models.File exposing (..)
+module Data.File exposing (..)
 
 import Json.Decode as JD
 

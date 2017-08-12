@@ -1,4 +1,4 @@
-module Models.Tag exposing (..)
+module Data.Tag exposing (..)
 
 import Json.Decode as JD
 

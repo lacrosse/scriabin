@@ -9,7 +9,8 @@ window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'), {
   token: window.localStorage.getItem('token'),
 });
 
-var DURATION_TRACKING_FREQUENCY = 500;
+var FPS = 5;
+var DURATION_TRACKING_FREQUENCY = 1000 / FPS;
 var PRELOAD_THRESHOLD = 10;
 
 // LocalStorage
@@ -53,6 +54,7 @@ window.player = {
         this.sync({
           state: 'playing',
           offset: seek,
+          progress: duration,
         });
 
         if (this.next && remaining <= PRELOAD_THRESHOLD) {
@@ -116,6 +118,7 @@ window.player = {
     this.sync({
       state: 'paused',
       offset: h.seek(),
+      progress: h.duration(),
     });
   },
 

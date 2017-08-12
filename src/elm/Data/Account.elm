@@ -1,4 +1,4 @@
-module Models.Account exposing (..)
+module Data.Account exposing (..)
 
 import Json.Decode as JD
 

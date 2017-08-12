@@ -1,57 +1,92 @@
 module Store exposing (..)
 
-import Models.Assemblage as Assemblage exposing (Assemblage)
-import Models.Assembly as Assembly exposing (Assembly)
-import Models.File as File exposing (File)
-import Models.Tag as Tag exposing (Tag)
+import Data.Assemblage as Assemblage exposing (Assemblage)
+import Data.Assembly as Assembly exposing (Assembly)
+import Data.File as File exposing (File)
+import Data.Tag as Tag exposing (Tag)
 import Dict exposing (Dict)
 import Jwt
 import Celeste
 
+
 -- MODEL
 
+
 type alias Store =
-  { assemblages : Dict Int Assemblage
-  , assemblies : Dict (Int, Int) Assembly
-  , files : Dict Int File
-  , tags : Dict Int Tag
-  }
+    { assemblages : Dict Int Assemblage
+    , assemblies : Dict ( Int, Int ) Assembly
+    , files : Dict Int File
+    , tags : Dict Int Tag
+    }
+
 
 type alias Model =
-  Store
+    Store
 
-type alias CompositeKey = (Int, Int)
+
+type alias CompositeKey =
+    ( Int, Int )
+
 
 type PrimaryKey
-  = Int
-  | CompositeKey
+    = Int
+    | CompositeKey
+
 
 initialModel : Model
 initialModel =
-  { assemblages = Dict.fromList []
-  , assemblies = Dict.fromList []
-  , files = Dict.fromList []
-  , tags = Dict.fromList []
-  }
+    { assemblages = Dict.fromList []
+    , assemblies = Dict.fromList []
+    , files = Dict.fromList []
+    , tags = Dict.fromList []
+    }
+
+
 
 -- UPDATE
 
+
 update : Celeste.ResponseTuple -> Model -> ( Model, Cmd msg )
-update (assemblages, assemblies, files, tags) model =
-  let
-    dictifyById = Dict.fromList << List.map (\a -> (a.id, a))
-    dictifyByComposite = Dict.fromList << List.map (\a -> ((a.assemblageId, a.childAssemblageId), a))
-    model_ =
-      { model
-      | assemblages = Dict.union (dictifyById assemblages) model.assemblages
-      , assemblies = Dict.union (dictifyByComposite assemblies) model.assemblies
-      , files = Dict.union (dictifyById files) model.files
-      , tags = Dict.union (dictifyById tags) model.tags
-      }
-  in (model_, Cmd.none)
+update ( assemblages, assemblies, files, tags ) model =
+    let
+        dictifyById =
+            Dict.fromList << List.map (\a -> ( a.id, a ))
+
+        dictifyByComposite =
+            Dict.fromList << List.map (\a -> ( ( a.assemblageId, a.childAssemblageId ), a ))
+
+        model_ =
+            { model
+                | assemblages = Dict.union (dictifyById assemblages) model.assemblages
+                , assemblies = Dict.union (dictifyByComposite assemblies) model.assemblies
+                , files = Dict.union (dictifyById files) model.files
+                , tags = Dict.union (dictifyById tags) model.tags
+            }
+    in
+        ( model_, Cmd.none )
+
+
 
 -- FUNCTIONS
 
+
 fetch : (Result Jwt.JwtError Celeste.Response -> msg) -> String -> Celeste.Route -> String -> Cmd msg
 fetch handler apiBase route jwt =
-  Jwt.send handler (Jwt.get jwt (Celeste.route apiBase route) (Celeste.decoder route))
+    Jwt.send handler (Jwt.get jwt (Celeste.route apiBase route) (Celeste.decoder route))
+
+
+assemblagesThroughAssemblies :
+    Store
+    -> Assemblage
+    -> (Assembly -> Int)
+    -> (Assembly -> Int)
+    -> Assembly.Kind
+    -> Assemblage.Kind
+    -> List Assemblage
+assemblagesThroughAssemblies { assemblies, assemblages } { id } foreignKey furtherForeignKey assemblyKind assemblageKind =
+    assemblies
+        |> Dict.filter (\_ a -> (foreignKey a) == id && (.kind a) == assemblyKind)
+        |> Dict.values
+        |> List.map furtherForeignKey
+        |> List.filterMap (flip Dict.get assemblages)
+        |> List.filter ((==) assemblageKind << .kind)

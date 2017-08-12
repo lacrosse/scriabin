@@ -1,4 +1,4 @@
-module Models.Assembly exposing (..)
+module Data.Assembly exposing (..)
 
 import Json.Decode as JD
 

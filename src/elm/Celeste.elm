@@ -1,11 +1,11 @@
 module Celeste exposing (..)
 
 import Json.Decode as JD
-import Models.Account
-import Models.Assemblage
-import Models.Assembly
-import Models.File
-import Models.Tag
+import Data.Account
+import Data.Assemblage
+import Data.Assembly
+import Data.File
+import Data.Tag
 
 -- MODEL
 
@@ -15,21 +15,21 @@ type Route
   | Account
 
 type Response
-  = ComposersResponse (List (Models.Assemblage.Assemblage))
+  = ComposersResponse (List (Data.Assemblage.Assemblage))
   | AssemblageResponse
-    ( Models.Assemblage.Assemblage
-    , List Models.Assemblage.Assemblage
-    , List Models.Assembly.Assembly
-    , List Models.File.File
-    , List Models.Tag.Tag
+    ( Data.Assemblage.Assemblage
+    , List Data.Assemblage.Assemblage
+    , List Data.Assembly.Assembly
+    , List Data.File.File
+    , List Data.Tag.Tag
     )
   | AccountResponse (String)
 
 type alias ResponseTuple =
-  ( List Models.Assemblage.Assemblage
-  , List Models.Assembly.Assembly
-  , List Models.File.File
-  , List Models.Tag.Tag
+  ( List Data.Assemblage.Assemblage
+  , List Data.Assembly.Assembly
+  , List Data.File.File
+  , List Data.Tag.Tag
   )
 
 -- FUNCTIONS
@@ -48,19 +48,19 @@ decoder : Route -> JD.Decoder Response
 decoder route =
   case route of
     Composers ->
-      (JD.map ComposersResponse << JD.field "assemblages" << JD.list) Models.Assemblage.jsonDecoder
+      (JD.map ComposersResponse << JD.field "assemblages" << JD.list) Data.Assemblage.jsonDecoder
     Assemblage id ->
       let
         tupleDecoder =
           JD.map5 (,,,,)
-            (JD.field "assemblage" Models.Assemblage.jsonDecoder)
-            (JD.field "assemblages" (JD.list Models.Assemblage.jsonDecoder))
-            (JD.field "assemblies" (JD.list Models.Assembly.jsonDecoder))
-            (JD.field "files" (JD.list Models.File.jsonDecoder))
-            (JD.field "tags" (JD.list Models.Tag.jsonDecoder))
+            (JD.field "assemblage" Data.Assemblage.jsonDecoder)
+            (JD.field "assemblages" (JD.list Data.Assemblage.jsonDecoder))
+            (JD.field "assemblies" (JD.list Data.Assembly.jsonDecoder))
+            (JD.field "files" (JD.list Data.File.jsonDecoder))
+            (JD.field "tags" (JD.list Data.Tag.jsonDecoder))
       in JD.map AssemblageResponse tupleDecoder
     Account ->
-      JD.map AccountResponse <| Models.Account.jsonDecoder
+      JD.map AccountResponse <| Data.Account.jsonDecoder
 
 responseToTuple : Response -> ResponseTuple
 responseToTuple resp =

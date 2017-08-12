@@ -1,4 +1,4 @@
-module Models.Assemblage exposing (..)
+module Data.Assemblage exposing (..)
 
 import Json.Decode as JD
 import Regex

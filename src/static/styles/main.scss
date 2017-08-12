@@ -7,9 +7,15 @@ $fa-font-path: '~font-awesome/fonts';
 @import '~font-awesome/scss/font-awesome';
 
 body {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 14pt;
+  font-family: 'PT Serif', serif;
+  font-size: 12pt;
+  font-weight: 400;
   padding-bottom: 50px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 400;
 }
 
 footer {
@@ -32,4 +38,11 @@ h1 {
   tr td:first-child {
     width: 70px;
   }
+}
+
+.progress-player {
+  height: 5px;
+  margin-bottom: 0;
+  position: absolute;
+  width: 400px;
 }
