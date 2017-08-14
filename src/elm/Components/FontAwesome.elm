@@ -1,12 +1,10 @@
-module Components.FontAwesome exposing (..)
+module Components.FontAwesome exposing (fa)
 
 import Html exposing (Html, i, text)
 import Html.Attributes exposing (class, attribute)
+import Components.Html exposing (aria)
+
 
 fa : String -> Html msg
 fa icon =
-  i [class ("fa fa-" ++ icon ++ " fa-fw"), attribute "aria-hidden" "true"] []
-
-faText : String -> String -> List (Html msg)
-faText icon txt =
-  [fa icon, text (" " ++ txt)]
+    i ([ class ("fa fa-" ++ icon ++ " fa-fw") ] ++ aria [ ( "hidden", "true" ) ]) []

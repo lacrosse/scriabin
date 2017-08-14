@@ -11,8 +11,8 @@ import View.Common exposing (fileTable)
 import View.Assemblage
 
 
-view : I18n.Language -> Assemblage -> Store -> List (Html Msg)
-view language assemblage store =
+view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view assemblage language store =
     let
         header =
             [ h1 [] [ text assemblage.name ]

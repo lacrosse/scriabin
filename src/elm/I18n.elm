@@ -17,7 +17,10 @@ type Sentence
     | Performances
     | Stats
     | SignIn
+    | SignInVerb
     | SignOut
+    | NotFoundHeader
+    | TryAgain
 
 
 t : Language -> Sentence -> List (Html msg)
@@ -49,8 +52,17 @@ t language line =
                 SignIn ->
                     [ text "Sign In" ]
 
+                SignInVerb ->
+                    t language SignIn
+
                 SignOut ->
                     [ text "Sign Out" ]
+
+                NotFoundHeader ->
+                    [ text "Not Found" ]
+
+                TryAgain ->
+                    [ text "Try again." ]
 
         Russian ->
             case line of
@@ -78,5 +90,49 @@ t language line =
                 SignIn ->
                     [ text "Вход" ]
 
+                SignInVerb ->
+                    [ text "Войти" ]
+
                 SignOut ->
                     [ text "Выход" ]
+
+                NotFoundHeader ->
+                    [ text "Не найдено" ]
+
+                TryAgain ->
+                    [ text "Попробуйте сызнова." ]
+
+
+languageFlag : Language -> String
+languageFlag lang =
+    case lang of
+        Russian ->
+            "🇷🇺"
+
+        English ->
+            "🇺🇸"
+
+
+languageName : Language -> Language -> String
+languageName lang describedLang =
+    case lang of
+        Russian ->
+            case describedLang of
+                Russian ->
+                    "русский"
+
+                English ->
+                    "английский"
+
+        English ->
+            case describedLang of
+                Russian ->
+                    "Russian"
+
+                English ->
+                    "English"
+
+
+languageDescription : Language -> Language -> String
+languageDescription lang describedLang =
+    languageFlag describedLang ++ " " ++ languageName lang describedLang

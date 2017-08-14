@@ -11,7 +11,7 @@ import View.Common
     exposing
         ( enumerateHuman
         , assemblageLink
-        , prependAndEnumerateLinks
+        , enumerateLinks
         )
 import Dict
 
@@ -47,16 +47,20 @@ view store h1Link assemblage =
             assemblagesThroughAssemblies store assemblage .childAssemblageId .assemblageId Assembly.Composed Assemblage.Person
 
         creationDate =
-            if List.isEmpty creationDateTags then
-                []
-            else
-                text " in " :: enumerateHuman (List.map (text << .value) creationDateTags)
+            case creationDateTags of
+                [] ->
+                    []
+
+                val ->
+                    text " in " :: enumerateHuman (List.map (text << .value) val)
 
         composedByHeader =
-            if List.isEmpty composers then
-                []
-            else
-                [ h3 [] (prependAndEnumerateLinks "composed by" composers ++ creationDate) ]
+            case composers of
+                [] ->
+                    []
+
+                val ->
+                    [ h3 [] (text "composed by " :: enumerateLinks val ++ creationDate) ]
 
         reconstructors =
             assemblagesThroughAssemblies
@@ -68,9 +72,11 @@ view store h1Link assemblage =
                 Assemblage.Person
 
         reconstructedByHeader =
-            if List.isEmpty reconstructors then
-                []
-            else
-                [ h4 [] (prependAndEnumerateLinks "reconstructed by" reconstructors) ]
+            case reconstructors of
+                [] ->
+                    []
+
+                val ->
+                    [ h4 [] (text "reconstructed by " :: enumerateLinks val) ]
     in
         ( [ div [ class "composition-header" ] (nameHeader :: composedByHeader ++ reconstructedByHeader) ], tags )

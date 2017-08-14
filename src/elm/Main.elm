@@ -12,18 +12,9 @@ import Html
         , a
         , span
         , button
-        , h1
-        , h3
-        , h4
         , p
         , ul
         , li
-        , table
-        , thead
-        , tbody
-        , tr
-        , th
-        , td
         , hr
         )
 import Html.Attributes
@@ -195,20 +186,20 @@ update msg model =
 
         SignIn ->
             let
+                responseToMsg resp =
+                    case resp of
+                        Ok user ->
+                            SignInSucceed user
+
+                        Err error ->
+                            SignInFail error
+
                 cmd =
                     case model.server.state of
                         Server.Disconnected wannabe ->
                             wannabe
                                 |> Server.signIn model.server.endpoint
-                                |> Http.send
-                                    (\result ->
-                                        case result of
-                                            Ok user ->
-                                                SignInSucceed user
-
-                                            Err error ->
-                                                SignInFail error
-                                    )
+                                |> Http.send responseToMsg
 
                         Server.Connected _ _ ->
                             Cmd.none
@@ -247,72 +238,78 @@ subscriptions model =
 -- VIEW
 
 
-modelToPage : Model -> List (Html Msg)
-modelToPage { language, routing, server } =
-    case routing.currentRoute of
-        Just (Routing.Root) ->
+view : Model -> Html Msg
+view model =
+    case model.routing.currentRoute of
+        Just route ->
+            withLayout model (routeToPage route model)
+
+        Nothing ->
+            withOverlay model.routing.transitioning []
+
+
+routeToPage : Routing.Route -> Model -> List (Html Msg)
+routeToPage route { language, server } =
+    case route of
+        Routing.Root ->
             Page.Root.view server.endpoint language
 
-        Just (Routing.NewSession) ->
+        Routing.NewSession ->
             Page.NewSession.view server language
 
-        Just (Routing.Stats) ->
-            Page.Stats.view server
+        Routing.Stats ->
+            Page.Stats.view server language
 
-        Just (Routing.Composers) ->
+        Routing.Composers ->
             case server.state of
                 Server.Connected _ store ->
-                    let
-                        assemblagesStore =
-                            Dict.filter (\_ a -> Data.Assemblage.isComposer a) store.assemblages
-
-                        assemblages =
-                            (List.sortBy .name << List.map Tuple.second << Dict.toList) assemblagesStore
-                    in
-                        Page.Assemblages.view assemblages
+                    store.assemblages
+                        |> Dict.filter (always Data.Assemblage.isComposer)
+                        |> Dict.toList
+                        |> List.map Tuple.second
+                        |> List.sortBy .name
+                        |> Page.Assemblages.view
 
                 Server.Disconnected _ ->
-                    Page.NotFound.view
+                    Page.NotFound.view language
 
-        Just (Routing.Assemblage id _) ->
+        Routing.Assemblage id _ ->
             case server.state of
                 Server.Connected _ store ->
                     case Dict.get id store.assemblages of
                         Just assemblage ->
-                            Page.Assemblage.view language assemblage store
+                            Page.Assemblage.view assemblage language store
 
                         Nothing ->
-                            Page.NotFound.view
+                            Page.NotFound.view language
 
                 Server.Disconnected _ ->
-                    Page.NotFound.view
-
-        Nothing ->
-            Page.NotFound.view
+                    Page.NotFound.view language
 
 
-view : Model -> Html Msg
-view model =
-    withLayout model (modelToPage model)
+withOverlay : Bool -> List (Html msg) -> Html msg
+withOverlay transitioning content =
+    let
+        overlay =
+            div
+                [ class "overlay-main" ]
+                [ div
+                    [ class "la-ball-grid-beat la-dark la-2x overlay-loader" ]
+                    (List.repeat 9 (div [] []))
+                ]
+
+        overlaidContent =
+            if transitioning then
+                overlay :: content
+            else
+                content
+    in
+        div [] overlaidContent
 
 
 withLayout : Model -> List (Html Msg) -> Html Msg
 withLayout model content =
     let
-        overlay =
-            case model.routing.transitioning of
-                True ->
-                    [ div
-                        [ class "overlay-main" ]
-                        [ div
-                            [ class "la-ball-grid-beat la-dark la-2x overlay-loader" ]
-                            (List.repeat 9 (div [] []))
-                        ]
-                    ]
-
-                False ->
-                    []
-
         navbarHeader =
             div [ class "navbar-header" ]
                 [ button
@@ -338,16 +335,44 @@ withLayout model content =
                 Server.Disconnected _ ->
                     []
 
-        rightNavContent =
+        languageRow lang =
+            li []
+                [ a
+                    [ onWithOptions "click"
+                        { stopPropagation = True
+                        , preventDefault = True
+                        }
+                        (JD.succeed (SetLanguage lang))
+                    ]
+                    [ text << I18n.languageDescription model.language <| lang ]
+                ]
+
+        currentLanguageDescription =
+            I18n.languageDescription model.language model.language
+
+        languageSwitch =
+            [ li [ class "dropdown" ]
+                [ a
+                    ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
+                        ++ data [ ( "toggle", "dropdown" ) ]
+                        ++ aria [ ( "haspopup", "true" ), ( "expanded", "false" ) ]
+                    )
+                    [ text currentLanguageDescription ]
+                , ul [ class "dropdown-menu" ]
+                    (List.map languageRow << List.filter ((/=) model.language) <| [ I18n.English, I18n.Russian ])
+                ]
+            ]
+
+        authRightNavContent =
             case model.server.state of
                 Server.Connected { username } _ ->
-                    li [ class "dropdown" ]
+                    [ li [ class "dropdown" ]
                         [ a
                             ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
                                 ++ data [ ( "toggle", "dropdown" ) ]
                                 ++ aria [ ( "haspopup", "true" ), ( "expanded", "false" ) ]
                             )
-                            (faText "user-circle-o" username)
+                            [ fa "user-circle-o", text username ]
                         , ul [ class "dropdown-menu" ]
                             [ li []
                                 [ navLink Routing.Stats
@@ -356,42 +381,28 @@ withLayout model content =
                                 ]
                             , li [ class "divider", attribute "role" "separator" ] []
                             , li []
-                                (List.map
-                                    (\( lang, desc ) ->
-                                        a
-                                            [ onWithOptions "click"
-                                                { stopPropagation = True
-                                                , preventDefault = True
-                                                }
-                                                (JD.succeed (SetLanguage lang))
-                                            ]
-                                            [ text desc ]
-                                    )
-                                    [ ( I18n.English, "🇺🇸 English" )
-                                    , ( I18n.Russian, "🇷🇺 Russian" )
-                                    ]
-                                )
-                            , li [ class "divider", attribute "role" "separator" ] []
-                            , li []
                                 [ a [ href "#", onClick (ServerMsg Server.SignOut) ]
                                     (fa "sign-out" :: t model.language I18n.SignOut)
                                 ]
                             ]
                         ]
+                    ]
 
                 Server.Disconnected _ ->
-                    li []
-                        [ navLink Routing.NewSession [] (faText "sign-in" "Sign In")
-                        ]
-
-        rightNav =
-            [ ul [ class "nav navbar-nav navbar-right" ] [ rightNavContent ] ]
+                    [ li []
+                        [ navLink Routing.NewSession [] (fa "sign-in" :: text " " :: t model.language I18n.SignIn) ]
+                    ]
 
         navbar =
             nav [ class "navbar navbar-default" ]
                 [ div [ class "container" ]
                     [ navbarHeader
-                    , div [ class "collapse navbar-collapse" ] (leftNav ++ rightNav)
+                    , div [ class "collapse navbar-collapse" ]
+                        (leftNav
+                            ++ [ ul [ class "nav navbar-nav navbar-right" ]
+                                    (languageSwitch ++ authRightNavContent)
+                               ]
+                        )
                     ]
                 ]
 
@@ -405,80 +416,72 @@ withLayout model content =
             footer [ class "container" ]
                 [ hr [] []
                 , p []
-                    ([ text "Powered by " ]
-                        ++ githubLink "lacrosse" "scriabin"
-                        ++ [ text " and " ]
-                        ++ githubLink "lacrosse" "celeste"
-                    )
+                    (text "Powered by " :: githubLink "lacrosse" "scriabin" ++ text " and " :: githubLink "lacrosse" "celeste")
                 ]
 
         player =
             List.map (Html.map PlayerMsg) (Player.view model.player)
     in
-        div [] (overlay ++ navbar :: mainContainer :: footer_ :: player)
+        withOverlay model.routing.transitioning (navbar :: mainContainer :: footer_ :: player)
 
 
 
 -- FUNCTIONS
 
 
+respToMsg : Routing.Route -> Result Jwt.JwtError Celeste.Response -> Msg
+respToMsg route response =
+    case response of
+        Ok value ->
+            HangUp <| Ok <| ( Celeste.responseToTuple value, route )
+
+        Err err ->
+            HangUp <|
+                Err <|
+                    case err of
+                        Jwt.HttpError (Http.BadPayload val _) ->
+                            val
+
+                        error ->
+                            toString error
+
+
+routeToCelesteRoute : Routing.Route -> Maybe ( Celeste.Route, Result Jwt.JwtError Celeste.Response -> Msg )
+routeToCelesteRoute route =
+    Maybe.map (flip (,) (respToMsg route)) <|
+        case route of
+            Routing.Assemblage id _ ->
+                Just (Celeste.Assemblage id)
+
+            Routing.Composers ->
+                Just (Celeste.Composers)
+
+            _ ->
+                Nothing
+
+
 processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
 processLocation navLoc model =
     let
-        routeToCelesteRoute route =
-            case route of
-                Routing.Assemblage id _ ->
-                    Just (Celeste.Assemblage id)
-
-                Routing.Composers ->
-                    Just Celeste.Composers
-
-                _ ->
-                    Nothing
-
-        maybeRoute =
+        appRoute =
             Routing.locationToRoute navLoc
 
-        respToMsg route response =
-            case response of
-                Ok value ->
-                    HangUp (Ok ( Celeste.responseToTuple value, route ))
-
-                Err err ->
-                    let
-                        string =
-                            case err of
-                                Jwt.HttpError (Http.BadPayload val _) ->
-                                    val
-
-                                error ->
-                                    toString error
-                    in
-                        HangUp (Err string)
+        fetch ( cRoute, msg ) =
+            cRoute
+                |> Store.fetch msg model.server.endpoint
+                |> Server.authorize model.server
     in
-        case maybeRoute of
-            Just route ->
-                case routeToCelesteRoute route of
-                    Just cRoute ->
-                        let
-                            mCmd =
-                                Server.authorize
-                                    model.server
-                                    (Store.fetch (respToMsg route) model.server.endpoint cRoute)
-                        in
-                            case mCmd of
-                                Just cmd ->
-                                    let
-                                        ( model_, routingCmd ) =
-                                            update (RoutingMsg Routing.StartTransition) model
-                                    in
-                                        ( model_, Cmd.batch [ routingCmd, cmd ] )
-
-                                Nothing ->
-                                    ( model, Cmd.none )
-
-                    Nothing ->
-                        ( { model | routing = { currentRoute = maybeRoute, transitioning = False } }, Cmd.none )
+        case
+            appRoute
+                |> Maybe.andThen routeToCelesteRoute
+                |> Maybe.andThen fetch
+        of
+            Just cmd ->
+                let
+                    ( model_, routingCmd ) =
+                        update (RoutingMsg Routing.StartTransition) model
+                in
+                    ( model_, Cmd.batch [ routingCmd, cmd ] )
 
             Nothing ->
-                ( { model | routing = { currentRoute = maybeRoute, transitioning = False } }, Cmd.none )
+                ( { model | routing = { currentRoute = appRoute, transitioning = False } }, Cmd.none )

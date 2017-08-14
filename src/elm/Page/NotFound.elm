@@ -8,12 +8,13 @@ import Html
         , p
         , div
         )
+import I18n exposing (t)
 
 
-view : List (Html msg)
-view =
+view : I18n.Language -> List (Html msg)
+view lang =
     [ div []
-        [ h1 [] [ text "Not found" ]
-        , p [] [ text "Try again." ]
+        [ h1 [] (t lang I18n.NotFoundHeader)
+        , p [] (t lang I18n.TryAgain)
         ]
     ]

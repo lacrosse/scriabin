@@ -10,17 +10,17 @@ import Page.Performance
 import Store exposing (Store)
 
 
-view : I18n.Language -> Assemblage -> Store -> List (Html Msg)
-view language assemblage =
+view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view assemblage =
     case assemblage.kind of
-        Assemblage.Person ->
-            Page.Person.view language assemblage
+        Just (Assemblage.Person) ->
+            Page.Person.view assemblage
 
-        Assemblage.Composition ->
-            Page.Composition.view language assemblage
+        Just (Assemblage.Composition) ->
+            Page.Composition.view assemblage
 
-        Assemblage.Recording ->
+        Just (Assemblage.Recording) ->
             Page.Performance.view assemblage
 
-        Assemblage.General ->
-            Page.Person.view language assemblage
+        Nothing ->
+            Page.Person.view assemblage

@@ -11,8 +11,8 @@ import Messages exposing (Msg)
 import I18n exposing (t)
 
 
-view : I18n.Language -> Assemblage -> Store -> List (Html Msg)
-view language assemblage store =
+view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view assemblage language store =
     let
         ( header, tags ) =
             View.Composition.Header.view store False assemblage

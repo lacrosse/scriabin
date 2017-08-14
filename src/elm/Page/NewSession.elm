@@ -17,8 +17,12 @@ import Html.Attributes
 import Server
 import I18n exposing (t)
 import Messages exposing (..)
-import Components.Bootstrap exposing (..)
-import Components.FontAwesome exposing (faText)
+import Components.Bootstrap
+    exposing
+        ( inputFormGroup
+        , horizontalForm
+        )
+import Components.FontAwesome exposing (fa)
 
 
 view : Server.Model -> I18n.Language -> List (Html Msg)
@@ -45,13 +49,13 @@ view { state } language =
                     [ placeholder "6IE.CR" ]
                 , div [ class "form-group" ]
                     [ div [ class "col-lg-10 col-lg-offset-2" ]
-                        [ button [ type_ "submit", class "btn btn-primary" ] (faText "sign-in" "Sign In") ]
+                        [ button
+                            [ type_ "submit", class "btn btn-primary" ]
+                            (fa "sign-in" :: t language I18n.SignInVerb)
+                        ]
                     ]
                 ]
             ]
 
         Server.Connected _ _ ->
-            [ h1 []
-                [ text "You are signed in."
-                ]
-            ]
+            [ h1 [] [ text "You are signed in." ] ]

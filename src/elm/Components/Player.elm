@@ -46,52 +46,55 @@ type Msg
 port webAudioControl : JE.Value -> Cmd msg
 
 
-syncWebAudio : Model -> String -> Cmd Msg
-syncWebAudio player server =
-    let
-        toJvalue player server =
-            case player of
-                Working state ( time, _ ) file _ next ->
-                    case state of
-                        Playing ->
-                            let
-                                default =
-                                    [ ( "action", JE.string "play" ), ( "time", JE.float time ) ] ++ fileTuples file server
+toWebAudioCommand : String -> Model -> JE.Value
+toWebAudioCommand endpoint player =
+    case player of
+        Working state ( time, _ ) file _ next ->
+            case state of
+                Playing ->
+                    let
+                        default =
+                            ( "action", JE.string "play" )
+                                :: ( "time", JE.float time )
+                                :: fileTuples file endpoint
 
-                                tail =
-                                    case List.head next of
-                                        Just nextFile ->
-                                            [ ( "next", JE.object (fileTuples nextFile server) ) ]
+                        tail =
+                            case List.head next of
+                                Just nextFile ->
+                                    [ ( "next", JE.object (fileTuples nextFile endpoint) ) ]
 
-                                        Nothing ->
-                                            []
-                            in
-                                JE.object (default ++ tail)
+                                Nothing ->
+                                    []
+                    in
+                        JE.object (default ++ tail)
 
-                        Paused ->
-                            JE.object ([ ( "action", JE.string "pause" ), ( "time", JE.float time ) ] ++ fileTuples file server)
+                Paused ->
+                    JE.object ([ ( "action", JE.string "pause" ), ( "time", JE.float time ) ] ++ fileTuples file endpoint)
 
-                Stopped ->
-                    JE.object [ ( "action", JE.string "stop" ) ]
-    in
-        webAudioControl (toJvalue player server)
+        Stopped ->
+            JE.object [ ( "action", JE.string "stop" ) ]
+
+
+syncWebAudio : String -> Model -> Cmd Msg
+syncWebAudio =
+    (<<) webAudioControl << toWebAudioCommand
 
 
 commandNature : Model -> String -> ( Model, Cmd Msg )
-commandNature model server =
-    ( model, syncWebAudio model server )
+commandNature model endpoint =
+    ( model, syncWebAudio endpoint model )
 
 
 update : Msg -> Model -> String -> ( Model, Cmd Msg )
-update msg model server =
+update msg model endpoint =
     case msg of
         Stop ->
-            commandNature Stopped server
+            commandNature Stopped endpoint
 
         Pause ->
             case model of
                 Working Playing time file previous next ->
-                    commandNature (Working Paused time file previous next) server
+                    commandNature (Working Paused time file previous next) endpoint
 
                 _ ->
                     ( model, Cmd.none )
@@ -99,7 +102,7 @@ update msg model server =
         Play ->
             case model of
                 Working Paused time file previous next ->
-                    commandNature (Working Playing time file previous next) server
+                    commandNature (Working Playing time file previous next) endpoint
 
                 _ ->
                     ( model, Cmd.none )
@@ -108,14 +111,14 @@ update msg model server =
             case model of
                 Working state ( time, dur ) file previous next ->
                     if time > 5 then
-                        commandNature (Working Playing ( 0, 1 ) file previous next) server
+                        commandNature (Working Playing ( 0, 1 ) file previous next) endpoint
                     else
                         case previous of
                             [] ->
-                                commandNature (Working Playing ( 0, 1 ) file previous next) server
+                                commandNature (Working Playing ( 0, 1 ) file previous next) endpoint
 
                             file_ :: previous_ ->
-                                commandNature (Working Playing ( 0, dur ) file_ previous_ (file :: next)) server
+                                commandNature (Working Playing ( 0, dur ) file_ previous_ (file :: next)) endpoint
 
                 Stopped ->
                     ( model, Cmd.none )
@@ -128,7 +131,7 @@ update msg model server =
                             ( model, Cmd.none )
 
                         nextFile :: newNext ->
-                            commandNature (Working Playing ( 0, 1 ) nextFile (file :: previous) newNext) server
+                            commandNature (Working Playing ( 0, 1 ) nextFile (file :: previous) newNext) endpoint
 
                 Stopped ->
                     ( model, Cmd.none )
@@ -138,7 +141,7 @@ update msg model server =
                 ( previous, next ) =
                     splitList files file
             in
-                commandNature (Working Playing ( 0, 1 ) file previous next) server
+                commandNature (Working Playing ( 0, 1 ) file previous next) endpoint
 
         Append newFiles ->
             case model of
@@ -148,7 +151,7 @@ update msg model server =
                 Stopped ->
                     case newFiles of
                         file_ :: next_ ->
-                            commandNature (Working Playing ( 0, 1 ) file_ [] next_) server
+                            commandNature (Working Playing ( 0, 1 ) file_ [] next_) endpoint
 
                         _ ->
                             ( model, Cmd.none )
@@ -180,7 +183,7 @@ update msg model server =
                                                 cmd =
                                                     case List.head next of
                                                         Just nextFile ->
-                                                            (webAudioControl << JE.object << (::) ( "action", JE.string "preload" )) (fileTuples nextFile server)
+                                                            (webAudioControl << JE.object << (::) ( "action", JE.string "preload" )) (fileTuples nextFile endpoint)
 
                                                         Nothing ->
                                                             Cmd.none
@@ -200,7 +203,7 @@ update msg model server =
                             Working _ _ file previous next ->
                                 case next of
                                     file_ :: next_ ->
-                                        commandNature (Working Playing ( 0, 1 ) file_ (file :: previous) next_) server
+                                        commandNature (Working Playing ( 0, 1 ) file_ (file :: previous) next_) endpoint
 
                                     _ ->
                                         ( Stopped, Cmd.none )
@@ -321,8 +324,8 @@ view model =
                                 []
 
                             val ->
-                                [ li [ class "dropdown-header" ] [ text "history" ] ]
-                                    ++ (List.map playlistRow << List.reverse << List.take 2) val
+                                li [ class "dropdown-header" ] [ text "history" ]
+                                    :: (List.map playlistRow << List.reverse << List.take 2) val
 
                     current =
                         [ li [ class "dropdown-header" ] [ text "now playing" ]
@@ -379,13 +382,13 @@ view model =
 
 
 fileUrl : String -> String -> String
-fileUrl server path =
-    server ++ "/files/" ++ path
+fileUrl endpoint path =
+    endpoint ++ "/files/" ++ path
 
 
 fileTuples : File -> String -> List ( String, JE.Value )
-fileTuples file server =
-    [ ( "url", JE.string (fileUrl server file.path) )
+fileTuples file endpoint =
+    [ ( "url", JE.string (fileUrl endpoint file.path) )
     , ( "id", JE.int file.id )
     ]
 

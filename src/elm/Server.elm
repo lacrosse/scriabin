@@ -149,25 +149,28 @@ fetchUser endpoint jwt =
         Just user
 
 
-signIn : String -> Wannabe -> Http.Request User
-signIn server { username, password } =
-    let
-        payload =
-            JE.object
-                [ ( "session"
-                  , JE.object
-                        [ ( "username", JE.string username )
-                        , ( "password", JE.string password )
-                        ]
-                  )
-                ]
+sessionDecoder : JD.Decoder User
+sessionDecoder =
+    JD.field "session"
+        (JD.map2
+            (flip flip [] << User)
+            (JD.field "username" JD.string)
+            (JD.field "jwt" JD.string)
+        )
 
-        decoder =
-            JD.field "session"
-                (JD.map2
-                    (\u j -> User u j [])
-                    (JD.field "username" JD.string)
-                    (JD.field "jwt" JD.string)
-                )
-    in
-        Jwt.authenticate (server ++ "/session") decoder payload
+
+sessionEncoder : Wannabe -> JE.Value
+sessionEncoder { username, password } =
+    JE.object
+        [ ( "session"
+          , JE.object
+                [ ( "username", JE.string username )
+                , ( "password", JE.string password )
+                ]
+          )
+        ]
+
+
+signIn : String -> Wannabe -> Http.Request User
+signIn endpoint =
+    Jwt.authenticate (endpoint ++ "/session") sessionDecoder << sessionEncoder

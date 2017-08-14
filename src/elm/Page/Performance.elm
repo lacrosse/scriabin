@@ -2,29 +2,28 @@ module Page.Performance exposing (view)
 
 import Data.Assemblage as Assemblage exposing (Assemblage)
 import Data.Assembly as Assembly
-import Data.File as File exposing (File)
 import View.Composition.Header
 import View.Common
     exposing
-        ( prependAndEnumerateLinks
-        , fileTable
+        ( fileTable
         )
 import Store exposing (Store, assemblagesThroughAssemblies)
-import Components.Player as Player
-import Components.FontAwesome exposing (fa)
 import Html exposing (Html, h4, text, table, tr, td, a)
-import Html.Attributes exposing (class, href)
 import Dict
-import Json.Decode as JD
-import Components.Player
 import Messages exposing (Msg)
+import I18n
 
 
-view : Assemblage -> Store -> List (Html Msg)
-view assemblage store =
+view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view assemblage language store =
     let
         compositions =
-            assemblagesThroughAssemblies store assemblage .childAssemblageId .assemblageId Assembly.Recorded Assemblage.Composition
+            assemblagesThroughAssemblies store
+                assemblage
+                .childAssemblageId
+                .assemblageId
+                Assembly.Recorded
+                Assemblage.Composition
 
         inheritedHeader =
             compositions
@@ -32,13 +31,21 @@ view assemblage store =
                 |> List.foldr (++) []
 
         performers =
-            assemblagesThroughAssemblies store assemblage .childAssemblageId .assemblageId Assembly.Performed Assemblage.Person
+            assemblagesThroughAssemblies
+                store
+                assemblage
+                .childAssemblageId
+                .assemblageId
+                Assembly.Performed
+                Assemblage.Person
 
         mainPerformanceHeader =
-            if List.isEmpty performers then
-                []
-            else
-                [ h4 [] ([ text "performed " ] ++ prependAndEnumerateLinks "by" performers) ]
+            case performers of
+                [] ->
+                    []
+
+                val ->
+                    [ h4 [] (text "performed by " :: View.Common.enumerateLinks val) ]
 
         performanceHeader =
             mainPerformanceHeader ++ [ h4 [] [ text assemblage.name ] ]
@@ -48,4 +55,4 @@ view assemblage store =
                 |> List.filterMap (flip Dict.get store.files)
                 |> List.sortBy .name
     in
-        inheritedHeader ++ performanceHeader ++ (fileTable files)
+        inheritedHeader ++ performanceHeader ++ fileTable files

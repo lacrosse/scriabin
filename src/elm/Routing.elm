@@ -24,7 +24,9 @@ type alias Model =
 
 initialModel : Model
 initialModel =
-    { currentRoute = Nothing, transitioning = False }
+    { currentRoute = Nothing
+    , transitioning = False
+    }
 
 
 
@@ -45,12 +47,7 @@ update msg model =
         FinishTransition mRoute ->
             case mRoute of
                 Just route ->
-                    ( { model
-                        | currentRoute = Just route
-                        , transitioning = False
-                      }
-                    , Cmd.none
-                    )
+                    ( { model | currentRoute = Just route, transitioning = False }, Cmd.none )
 
                 Nothing ->
                     ( { model | transitioning = False }, Cmd.none )
@@ -62,9 +59,15 @@ update msg model =
 
 basedInt : Parser (Int -> b) b
 basedInt =
-    custom "BASED_INT" <|
-        \s ->
-            (String.toInt << Maybe.withDefault s << List.head << Regex.split (Regex.AtMost 1) (Regex.regex "-")) s
+    let
+        firstInStringToInt str =
+            str
+                |> Regex.split (Regex.AtMost 1) (Regex.regex "-")
+                |> List.head
+                |> Maybe.withDefault str
+                |> String.toInt
+    in
+        custom "BASED_INT" firstInStringToInt
 
 
 routingTable : List (Parser (Route -> c) c)
@@ -79,7 +82,9 @@ routingTable =
 
 locationToRoute : Location -> Maybe Route
 locationToRoute =
-    parseHash (oneOf routingTable)
+    routingTable
+        |> oneOf
+        |> parseHash
 
 
 routeToString : Route -> String

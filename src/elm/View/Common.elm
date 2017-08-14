@@ -23,7 +23,6 @@ import Data.File exposing (File)
 import Messages exposing (Msg)
 import Json.Decode as JD
 import Routing
-import I18n exposing (..)
 import Components.FontAwesome exposing (fa)
 import Components.Player as Player
 
@@ -85,9 +84,14 @@ enumerateHuman list =
             [ head, text ", " ] ++ enumerateHuman tail
 
 
+enumerateLinks : List Assemblage -> List (Html Msg)
+enumerateLinks assemblages =
+    enumerateHuman (List.map assemblageLink assemblages)
+
+
 prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
 prependAndEnumerateLinks string assemblages =
-    text (string ++ " ") :: enumerateHuman (List.map assemblageLink assemblages)
+    text (string ++ " ") :: enumerateLinks assemblages
 
 
 assemblageLink : Assemblage -> Html Msg
@@ -98,16 +102,16 @@ assemblageLink assemblage =
 fileTable : List File -> List (Html Msg)
 fileTable files =
     let
-        playMsg =
+        play =
             Messages.PlayerMsg << Player.Update files
 
-        queueMsg =
-            Messages.PlayerMsg << Player.Append << List.singleton
-
-        rows =
-            List.map (\file -> fileRow ( playMsg file, queueMsg file ) file) files
+        queue =
+            Messages.PlayerMsg << Player.Append
     in
-        [ table [ class "table table-audio-list" ] rows ]
+        files
+            |> List.map (\file -> fileRow ( play file, queue [ file ] ) file)
+            |> table [ class "table table-audio-list" ]
+            |> List.singleton
 
 
 fileRow : ( Msg, Msg ) -> File -> Html Msg
@@ -127,7 +131,5 @@ fileRow ( playMsg, queueMsg ) { name } =
                 [ a (linkOptions (JD.succeed playMsg)) [ fa "play" ]
                 , a (linkOptions (JD.succeed queueMsg)) [ fa "list" ]
                 ]
-            , td []
-                [ text name
-                ]
+            , td [] [ text name ]
             ]
