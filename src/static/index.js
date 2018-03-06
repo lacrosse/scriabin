@@ -3,15 +3,21 @@ require('../../node_modules/bootstrap-sass/assets/javascripts/bootstrap');
 
 var Scriabin = require('../elm/Main');
 
-window.Howl = require('howler').Howl;
-
 window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'), {
+  endpoint: window.localStorage.getItem('endpoint'),
   token: window.localStorage.getItem('token'),
 });
 
+window.Howl = require('howler').Howl;
+
 var FPS = 5;
 var DURATION_TRACKING_FREQUENCY = 1000 / FPS;
-var PRELOAD_THRESHOLD = 10;
+
+// PageTitle
+
+window.ScriabinApp.ports.title.subscribe(function (string) {
+  document.title = string;
+});
 
 // LocalStorage
 
@@ -57,11 +63,6 @@ window.player = {
           progress: duration,
         });
 
-        if (this.next && remaining <= PRELOAD_THRESHOLD) {
-          player.buildHowl(this.next.url, this.next.id);
-          this.next = null;
-        }
-
         var _this = this;
 
         this.durationWorker = setTimeout(function () {
@@ -72,28 +73,23 @@ window.player = {
     }
   },
 
-  buildHowl: function (url, id) {
-    var h = this.howls[id];
+  setCurrentHowl: function (url, id) {
+    h = new Howl({
+      src: [url],
+      format: ['mp3'],
+      html5: true,
+    });
 
-    if (!h) {
-      h = new Howl({
-        src: [url],
-        format: ['mp3'],
-        html5: true,
-      });
-
-      this.howls[id] = h;
-    }
-
-    return h;
+    this.currentHowl = h;
   },
 
   play: function (url, id, time) {
     this.stop();
 
-    var h = this.buildHowl(url, id);
+    this.setCurrentHowl(url, id);
 
-    this.currentHowl = h;
+    var h = this.currentHowl;
+
     h.seek(time);
     h.play();
 
@@ -107,10 +103,11 @@ window.player = {
       _this.sync({
         state: 'finished',
       });
+      setTimeout(function () { h.unload(); }, DURATION_TRACKING_FREQUENCY * 2);
     });
   },
 
-  pause: function (url, id) {
+  pause: function (url) {
     var h = this.currentHowl;
 
     h.pause();
@@ -133,10 +130,9 @@ window.player = {
 
 window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {
-    player.play(object.url, object.id, object.time);
-    player.next = object.next;
+    window.player.play(object.url, object.id, object.time);
   } else if (object.action == 'pause') {
-    window.player.pause(object.url, object.token, object.id);
+    window.player.pause(object.url);
   } else if (object.action == 'stop') {
     window.player.stop();
   } else {
