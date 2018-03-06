@@ -39,9 +39,7 @@ window.ScriabinApp.ports.localStorage.subscribe(function (object) {
 // Audio
 
 window.player = {
-  howls: {},
   currentHowl: null,
-  next: null,
   durationWorker: null,
 
   sync: function (state) {
@@ -73,7 +71,7 @@ window.player = {
     }
   },
 
-  setCurrentHowl: function (url, id) {
+  setNewCurrentHowl: function (url, id) {
     h = new Howl({
       src: [url],
       format: ['mp3'],
@@ -84,13 +82,16 @@ window.player = {
   },
 
   play: function (url, id, time) {
-    this.stop();
+    this.unloadCurrentHowl();
 
-    this.setCurrentHowl(url, id);
+    this.setNewCurrentHowl(url, id);
 
     var h = this.currentHowl;
 
-    h.seek(time);
+    if (time > 0) {
+      h.seek(time);
+    }
+
     h.play();
 
     var _this = this;
@@ -103,7 +104,7 @@ window.player = {
       _this.sync({
         state: 'finished',
       });
-      setTimeout(function () { h.unload(); }, DURATION_TRACKING_FREQUENCY * 2);
+      _this.unloadHowl(h);
     });
   },
 
@@ -122,11 +123,24 @@ window.player = {
   },
 
   stop: function () {
+    this.unloadCurrentHowl();
+  },
+
+  unloadCurrentHowl: function () {
     var h = this.currentHowl;
 
-    if (h) h.stop();
+    if (h) {
+      h.stop();
+      this.unloadHowl(h);
+    }
 
     this.currentHowl = null;
+  },
+
+  unloadHowl: function (h) {
+    setTimeout(function () {
+      h.unload();
+    }, DURATION_TRACKING_FREQUENCY * 2);
   },
 };
 

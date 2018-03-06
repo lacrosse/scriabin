@@ -75,21 +75,26 @@ syncWebAudio endpoint player =
     (webAudioControl << toWebAudioCommand endpoint) player
 
 
+toTitleCmd : Model -> Cmd a
+toTitleCmd model =
+    case model of
+        Working state _ current _ _ ->
+            case state of
+                Playing ->
+                    Components.PageTitle.set ("▶️ " ++ current.name)
+
+                Paused ->
+                    Components.PageTitle.set ("⏸ " ++ current.name)
+
+        Stopped ->
+            Components.PageTitle.reset
+
+
 commandNature : Model -> String -> ( Model, Cmd Msg )
 commandNature model endpoint =
     let
         titleCmd =
-            case model of
-                Working state _ current _ _ ->
-                    case state of
-                        Playing ->
-                            Components.PageTitle.set ("▶️ " ++ current.name)
-
-                        Paused ->
-                            Components.PageTitle.set ("⏸ " ++ current.name)
-
-                Stopped ->
-                    Components.PageTitle.reset
+            toTitleCmd model
 
         webAudioCmd =
             syncWebAudio endpoint model
