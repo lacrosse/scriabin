@@ -1,6 +1,7 @@
 module Data.Assemblage exposing (..)
 
 import Json.Decode as JD
+import Data.File exposing (File)
 import Regex
 
 
@@ -11,12 +12,13 @@ type Kind
     = Person
     | Composition
     | Recording
+    | Generic
 
 
 type alias Assemblage =
     { id : Int
     , name : String
-    , kind : Maybe Kind
+    , kind : Kind
     , fileIds : List Int
     , tagIds : List Int
     }
@@ -29,36 +31,43 @@ type alias Assemblage =
 isComposer : Assemblage -> Bool
 isComposer { kind } =
     case kind of
-        Just Person ->
+        Person ->
             True
 
         _ ->
             False
 
 
-parseKind : String -> Maybe Kind
-parseKind string =
-    case string of
-        "person" ->
-            Just Person
+parseKind : Maybe String -> Kind
+parseKind maybeString =
+    case maybeString of
+        Just "person" ->
+            Person
 
-        "composition" ->
-            Just Composition
+        Just "composition" ->
+            Composition
 
-        "recording" ->
-            Just Recording
+        Just "recording" ->
+            Recording
 
         _ ->
-            Nothing
+            Generic
 
 
 toUrlSlug : Assemblage -> String
 toUrlSlug { name } =
     "-"
-        ++ name
-        |> Regex.replace Regex.All (Regex.regex "\\W+") (always "-")
-        |> Regex.replace Regex.All (Regex.regex "-+$") (always "")
-        |> String.toLower
+        ++ (name
+                |> Regex.replace Regex.All (Regex.regex "\\W+") (always "-")
+                |> Regex.replace Regex.All (Regex.regex "-+$") (always "")
+                |> Regex.replace Regex.All (Regex.regex "^-+") (always "")
+                |> String.toLower
+           )
+
+
+childrenFiles : Assemblage -> List File
+childrenFiles assemblage =
+    []
 
 
 
@@ -74,6 +83,6 @@ jsonDecoder =
         JD.map5 Assemblage
             (JD.field "id" JD.int)
             (JD.field "name" JD.string)
-            ((JD.map parseKind << JD.field "kind") JD.string)
+            (JD.map parseKind (JD.field "kind" (JD.nullable JD.string)))
             (maybeList "file_ids" JD.int)
             (maybeList "tag_ids" JD.int)

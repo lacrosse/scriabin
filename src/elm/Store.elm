@@ -5,7 +5,6 @@ import Data.Assembly exposing (Assembly)
 import Data.File exposing (File)
 import Data.Tag exposing (Tag)
 import Dict exposing (Dict)
-import Jwt
 import Celeste
 import Misc exposing (twice)
 
@@ -80,31 +79,16 @@ update ( assemblages, assemblies, files, tags ) model =
 -- FUNCTIONS
 
 
-fetch :
-    (Result Jwt.JwtError Celeste.Response -> msg)
-    -> String
-    -> Celeste.Route
-    -> String
-    -> Cmd msg
-fetch handler endpoint cRoute jwt =
-    cRoute
-        |> Celeste.decoder
-        |> Jwt.get jwt (Celeste.route endpoint cRoute)
-        |> Jwt.send handler
-
-
 assemblagesThroughAssemblies :
     Store
     -> Assemblage
     -> (Assembly -> Int)
     -> (Assembly -> Int)
     -> Data.Assembly.Kind
-    -> Data.Assemblage.Kind
     -> List Assemblage
-assemblagesThroughAssemblies { assemblies, assemblages } { id } foreignKey furtherForeignKey assemblyKind assemblageKind =
+assemblagesThroughAssemblies { assemblies, assemblages } { id } foreignKey furtherForeignKey assemblyKind =
     assemblies
-        |> Dict.filter (always (\a -> (foreignKey a) == id && (.kind a) == Just assemblyKind))
+        |> Dict.filter (always (\a -> (foreignKey a) == id && (.kind a) == assemblyKind))
         |> Dict.values
         |> List.map furtherForeignKey
         |> List.filterMap (flip Dict.get assemblages)
-        |> List.filter ((==) (Just assemblageKind) << .kind)

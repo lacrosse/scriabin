@@ -11,8 +11,8 @@ import Messages exposing (Msg)
 import I18n exposing (t)
 
 
-view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
-view assemblage language store =
+view : String -> Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view endpoint assemblage language store =
     let
         ( header, tags ) =
             View.Composition.Header.view store False assemblage
@@ -24,9 +24,8 @@ view assemblage language store =
                 .assemblageId
                 .childAssemblageId
                 Assembly.Recorded
-                Assemblage.Recording
     in
         header
             ++ View.Common.tagsRow tags
             ++ View.Assemblage.table (t language I18n.Performances) recordings
-            ++ View.Common.fileTable []
+            ++ View.Common.fileTable endpoint []

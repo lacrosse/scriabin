@@ -11,13 +11,11 @@ import View.Common exposing (fileTable)
 import View.Assemblage
 
 
-view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
-view assemblage language store =
+view : String -> Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view endpoint assemblage language store =
     let
         header =
-            [ h1 [] [ text assemblage.name ]
-              -- , p [] [ a [ href (wikipediaPath assemblage.name), target "_blank" ] [ text "Wikipedia" ] ]
-            ]
+            [ h1 [] [ text assemblage.name ] ]
 
         files =
             List.filterMap (flip Dict.get store.files) assemblage.fileIds
@@ -29,7 +27,6 @@ view assemblage language store =
                 .assemblageId
                 .childAssemblageId
                 Assembly.Performed
-                Assemblage.Recording
 
         compositions_ =
             assemblagesThroughAssemblies
@@ -38,7 +35,6 @@ view assemblage language store =
                 .assemblageId
                 .childAssemblageId
                 Assembly.Composed
-                Assemblage.Composition
 
         performances =
             List.sortBy .name performances_
@@ -47,10 +43,15 @@ view assemblage language store =
             List.sortBy .name compositions_
 
         reconstructions =
-            assemblagesThroughAssemblies store assemblage .assemblageId .childAssemblageId Assembly.Reconstructed Assemblage.Composition
+            assemblagesThroughAssemblies
+                store
+                assemblage
+                .assemblageId
+                .childAssemblageId
+                Assembly.Reconstructed
     in
         header
-            ++ (fileTable files)
+            ++ (fileTable endpoint files)
             ++ (View.Assemblage.table (t language I18n.Performances) performances)
             ++ (View.Assemblage.table (t language I18n.Compositions) compositions)
             ++ (View.Assemblage.table [ text "Reconstructions of other composers' works" ] reconstructions)

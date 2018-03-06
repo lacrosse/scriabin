@@ -11,11 +11,12 @@ type Kind
     | Recorded
     | Reconstructed
     | Performed
+    | Generic
 
 
 type alias Assembly =
     { assemblageId : Int
-    , kind : Maybe Kind
+    , kind : Kind
     , childAssemblageId : Int
     }
 
@@ -24,23 +25,23 @@ type alias Assembly =
 -- FUNCTIONS
 
 
-parseKind : String -> Maybe Kind
-parseKind string =
-    case string of
-        "composed" ->
-            Just Composed
+parseKind : Maybe String -> Kind
+parseKind maybeString =
+    case maybeString of
+        Just "composed" ->
+            Composed
 
-        "recorded" ->
-            Just Recorded
+        Just "recorded" ->
+            Recorded
 
-        "performed" ->
-            Just Performed
+        Just "performed" ->
+            Performed
 
-        "reconstructed" ->
-            Just Reconstructed
+        Just "reconstructed" ->
+            Reconstructed
 
         _ ->
-            Nothing
+            Generic
 
 
 
@@ -51,5 +52,5 @@ jsonDecoder : JD.Decoder Assembly
 jsonDecoder =
     JD.map3 Assembly
         (JD.field "assemblage_id" JD.int)
-        (JD.map parseKind (JD.field "kind" JD.string))
+        (JD.map parseKind (JD.field "kind" (JD.nullable JD.string)))
         (JD.field "child_assemblage_id" JD.int)

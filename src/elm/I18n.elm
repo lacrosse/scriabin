@@ -21,6 +21,7 @@ type Sentence
     | SignOut
     | NotFoundHeader
     | TryAgain
+    | Profile
 
 
 t : Language -> Sentence -> List (Html msg)
@@ -64,6 +65,9 @@ t language line =
                 TryAgain ->
                     [ text "Try again." ]
 
+                Profile ->
+                    [ text "Profile" ]
+
         Russian ->
             case line of
                 Welcome ->
@@ -101,6 +105,9 @@ t language line =
 
                 TryAgain ->
                     [ text "Попробуйте сызнова." ]
+
+                Profile ->
+                    [ text "Профиль" ]
 
 
 languageFlag : Language -> String

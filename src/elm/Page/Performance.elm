@@ -2,28 +2,26 @@ module Page.Performance exposing (view)
 
 import Data.Assemblage as Assemblage exposing (Assemblage)
 import Data.Assembly as Assembly
+import View.Assemblage
 import View.Composition.Header
 import View.Common
-    exposing
-        ( fileTable
-        )
-import Store exposing (Store, assemblagesThroughAssemblies)
+import Store exposing (Store)
 import Html exposing (Html, h4, text, table, tr, td, a)
 import Dict
 import Messages exposing (Msg)
 import I18n
 
 
-view : Assemblage -> I18n.Language -> Store -> List (Html Msg)
-view assemblage language store =
+view : String -> Assemblage -> I18n.Language -> Store -> List (Html Msg)
+view endpoint assemblage language store =
     let
         compositions =
-            assemblagesThroughAssemblies store
+            Store.assemblagesThroughAssemblies
+                store
                 assemblage
                 .childAssemblageId
                 .assemblageId
                 Assembly.Recorded
-                Assemblage.Composition
 
         inheritedHeader =
             compositions
@@ -31,13 +29,20 @@ view assemblage language store =
                 |> List.foldr (++) []
 
         performers =
-            assemblagesThroughAssemblies
+            Store.assemblagesThroughAssemblies
                 store
                 assemblage
                 .childAssemblageId
                 .assemblageId
                 Assembly.Performed
-                Assemblage.Person
+
+        generics =
+            Store.assemblagesThroughAssemblies
+                store
+                assemblage
+                .assemblageId
+                .childAssemblageId
+                Assembly.Generic
 
         mainPerformanceHeader =
             case performers of
@@ -50,9 +55,14 @@ view assemblage language store =
         performanceHeader =
             mainPerformanceHeader ++ [ h4 [] [ text assemblage.name ] ]
 
+        header =
+            inheritedHeader ++ performanceHeader
+
         files =
             assemblage.fileIds
                 |> List.filterMap (flip Dict.get store.files)
                 |> List.sortBy .name
     in
-        inheritedHeader ++ performanceHeader ++ fileTable files
+        header
+            ++ View.Assemblage.table [ text "Related" ] generics
+            ++ View.Common.fileTable endpoint files

@@ -12,10 +12,20 @@ import Html
         , div
         , a
         , table
+        , thead
+        , tbody
         , tr
+        , th
         , td
         )
-import Html.Attributes exposing (class, href, target)
+import Html.Attributes
+    exposing
+        ( class
+        , href
+        , target
+        , colspan
+        , href
+        )
 import Html.Events exposing (onWithOptions)
 import Data.Assemblage as Assemblage exposing (Assemblage)
 import Data.Tag exposing (Tag)
@@ -74,14 +84,14 @@ enumerateHuman list =
         [] ->
             []
 
-        [ head ] ->
-            [ head ]
+        [ hd ] ->
+            [ hd ]
 
-        [ head1, head2 ] ->
-            [ head1, text " and ", head2 ]
+        [ hd1, hd2 ] ->
+            [ hd1, text " and ", hd2 ]
 
-        head :: tail ->
-            [ head, text ", " ] ++ enumerateHuman tail
+        hd :: tl ->
+            hd :: text ", " :: enumerateHuman tl
 
 
 enumerateLinks : List Assemblage -> List (Html Msg)
@@ -89,33 +99,55 @@ enumerateLinks assemblages =
     enumerateHuman (List.map assemblageLink assemblages)
 
 
-prependAndEnumerateLinks : String -> List Assemblage -> List (Html Msg)
-prependAndEnumerateLinks string assemblages =
-    text (string ++ " ") :: enumerateLinks assemblages
-
-
 assemblageLink : Assemblage -> Html Msg
 assemblageLink assemblage =
     navLink (Routing.Assemblage assemblage.id (Assemblage.toUrlSlug assemblage)) [] [ text assemblage.name ]
 
 
-fileTable : List File -> List (Html Msg)
-fileTable files =
-    let
-        play =
-            Messages.PlayerMsg << Player.Update files
-
-        queue =
-            Messages.PlayerMsg << Player.Append
-    in
+fileTable : String -> List File -> List (Html Msg)
+fileTable endpoint files =
+    if List.isEmpty files then
+        []
+    else
         files
-            |> List.map (\file -> fileRow ( play file, queue [ file ] ) file)
-            |> table [ class "table table-audio-list" ]
+            |> List.map (\file -> fileRow endpoint files file)
+            |> (\rows ->
+                    table [ class "table table-audio-list" ]
+                        [ thead [] [ tr [] [ th [ colspan 2 ] [ text "Files" ] ] ]
+                        , tbody [] rows
+                        ]
+               )
             |> List.singleton
 
 
-fileRow : ( Msg, Msg ) -> File -> Html Msg
-fileRow ( playMsg, queueMsg ) { name } =
+fileRow : String -> List File -> File -> Html Msg
+fileRow endpoint files file =
+    if file.mime == "audio/mpeg" then
+        audioFileRow endpoint files file
+    else if file.mime == "image/jpeg" then
+        imageFileRow endpoint file
+    else
+        genericFileRow endpoint file
+
+
+genericFileRow : String -> File -> Html Msg
+genericFileRow endpoint file =
+    tr []
+        [ td [] []
+        , td [] [ text file.name ]
+        ]
+
+
+imageFileRow : String -> File -> Html Msg
+imageFileRow endpoint file =
+    tr []
+        [ td [] [ a [ href (Data.File.url endpoint file), target "_blank" ] [ fa "eye" ] ]
+        , td [] [ text file.name ]
+        ]
+
+
+audioFileRow : String -> List File -> File -> Html Msg
+audioFileRow endpoint files file =
     let
         linkOptions msg =
             [ href ""
@@ -128,8 +160,8 @@ fileRow ( playMsg, queueMsg ) { name } =
     in
         tr []
             [ td []
-                [ a (linkOptions (JD.succeed playMsg)) [ fa "play" ]
-                , a (linkOptions (JD.succeed queueMsg)) [ fa "list" ]
+                [ a (linkOptions (JD.succeed << Messages.PlayerMsg << Player.UpdateSplitFiles files <| file)) [ fa "play" ]
+                , a (linkOptions (JD.succeed << Messages.PlayerMsg << Player.Append <| [ file ])) [ fa "list" ]
                 ]
-            , td [] [ text name ]
+            , td [] [ text file.name ]
             ]

@@ -14,7 +14,8 @@ import Html.Attributes
         , placeholder
         , type_
         )
-import Server
+import Connection
+import Connection.Server as Server
 import I18n exposing (t)
 import Messages exposing (..)
 import Components.Bootstrap
@@ -28,7 +29,7 @@ import Components.FontAwesome exposing (fa)
 view : Server.Model -> I18n.Language -> List (Html Msg)
 view { state } language =
     case state of
-        Server.Disconnected { username, password } ->
+        Server.NotAuthenticated { username, password } ->
             [ h1 [] (t language I18n.SignIn)
             , horizontalForm SignIn
                 [ inputFormGroup
@@ -37,7 +38,7 @@ view { state } language =
                     "Username"
                     "text"
                     username
-                    (ServerMsg << Server.UpdateWannabeUsername)
+                    (ConnectionMsg << Connection.ServerMsg << Server.UpdateWannabeUsername)
                     [ placeholder "seanbooth" ]
                 , inputFormGroup
                     "user"
@@ -45,8 +46,8 @@ view { state } language =
                     "Password"
                     "password"
                     password
-                    (ServerMsg << Server.UpdateWannabePassword)
-                    [ placeholder "6IE.CR" ]
+                    (ConnectionMsg << Connection.ServerMsg << Server.UpdateWannabePassword)
+                    [ placeholder "surripere" ]
                 , div [ class "form-group" ]
                     [ div [ class "col-lg-10 col-lg-offset-2" ]
                         [ button
@@ -57,5 +58,5 @@ view { state } language =
                 ]
             ]
 
-        Server.Connected _ _ ->
+        Server.Authenticated _ _ ->
             [ h1 [] [ text "You are signed in." ] ]

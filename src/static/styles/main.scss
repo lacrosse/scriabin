@@ -43,10 +43,14 @@ h1 {
 }
 
 .progress-player {
-  height: 5px;
+  height: 8px;
   margin-bottom: 0;
   position: absolute;
   width: 400px;
+}
+
+.progress-bar-player {
+  transition-duration: .2s;
 }
 
 .overlay-main {
@@ -69,4 +73,8 @@ h1 {
 .dropdown-scrollable {
   overflow-y: scroll;
   max-height: 500px;
+}
+
+.fa-fw {
+  margin-right: .4rem;
 }

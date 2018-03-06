@@ -2,10 +2,12 @@ module Celeste exposing (..)
 
 import Json.Decode as JD
 import Data.Account
-import Data.Assemblage
-import Data.Assembly
-import Data.File
-import Data.Tag
+import Data.Assemblage exposing (Assemblage)
+import Data.Assembly exposing (Assembly)
+import Data.File exposing (File)
+import Data.Tag exposing (Tag)
+import Jwt
+import Http
 
 
 -- MODEL
@@ -18,23 +20,31 @@ type Route
 
 
 type Response
-    = ComposersResponse (List Data.Assemblage.Assemblage)
-    | AssemblageResponse ( Data.Assemblage.Assemblage, List Data.Assemblage.Assemblage, List Data.Assembly.Assembly, List Data.File.File, List Data.Tag.Tag )
+    = ComposersResponse (List Assemblage)
+    | AssemblageResponse ( Assemblage, List Assemblage, List Assembly, List File, List Tag )
     | AccountResponse String
 
 
+type alias ResponseResult =
+    Result Jwt.JwtError Response
+
+
 type alias ResponseTuple =
-    ( List Data.Assemblage.Assemblage, List Data.Assembly.Assembly, List Data.File.File, List Data.Tag.Tag )
+    ( List Assemblage, List Assembly, List File, List Tag )
+
+
+type alias Outcome =
+    Result String ResponseTuple
 
 
 
 -- FUNCTIONS
 
 
-route : String -> Route -> String
-route apiBase route =
+url : String -> Route -> String
+url endpoint route =
     let
-        rel =
+        relative =
             case route of
                 Composers ->
                     "/composers"
@@ -45,26 +55,23 @@ route apiBase route =
                 Account ->
                     "/account"
     in
-        apiBase ++ rel
+        endpoint ++ relative
 
 
-decoder : Route -> JD.Decoder Response
-decoder route =
+decoderForRoute : Route -> JD.Decoder Response
+decoderForRoute route =
     case route of
         Composers ->
             (JD.map ComposersResponse << JD.field "assemblages" << JD.list) Data.Assemblage.jsonDecoder
 
         Assemblage id ->
-            let
-                tupleDecoder =
-                    JD.map5 (,,,,)
-                        (JD.field "assemblage" Data.Assemblage.jsonDecoder)
-                        (JD.field "assemblages" (JD.list Data.Assemblage.jsonDecoder))
-                        (JD.field "assemblies" (JD.list Data.Assembly.jsonDecoder))
-                        (JD.field "files" (JD.list Data.File.jsonDecoder))
-                        (JD.field "tags" (JD.list Data.Tag.jsonDecoder))
-            in
-                JD.map AssemblageResponse tupleDecoder
+            JD.map AssemblageResponse <|
+                JD.map5 (,,,,)
+                    (JD.field "assemblage" Data.Assemblage.jsonDecoder)
+                    (JD.field "assemblages" (JD.list Data.Assemblage.jsonDecoder))
+                    (JD.field "assemblies" (JD.list Data.Assembly.jsonDecoder))
+                    (JD.field "files" (JD.list Data.File.jsonDecoder))
+                    (JD.field "tags" (JD.list Data.Tag.jsonDecoder))
 
         Account ->
             JD.map AccountResponse <| Data.Account.jsonDecoder
@@ -81,3 +88,23 @@ responseToTuple resp =
 
         _ ->
             ( [], [], [], [] )
+
+
+resultErrToString : Jwt.JwtError -> String
+resultErrToString err =
+    case err of
+        Jwt.HttpError (Http.BadPayload val _) ->
+            val
+
+        Jwt.HttpError (Http.NetworkError) ->
+            "I’ve encountered a network error."
+
+        error ->
+            toString error
+
+
+resultToOutcome : ResponseResult -> Outcome
+resultToOutcome celesteResult =
+    celesteResult
+        |> Result.map responseToTuple
+        |> Result.mapError resultErrToString

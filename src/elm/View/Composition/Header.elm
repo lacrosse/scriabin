@@ -44,7 +44,12 @@ view store h1Link assemblage =
             h1 [] (name :: tonality)
 
         composers =
-            assemblagesThroughAssemblies store assemblage .childAssemblageId .assemblageId Assembly.Composed Assemblage.Person
+            assemblagesThroughAssemblies
+                store
+                assemblage
+                .childAssemblageId
+                .assemblageId
+                Assembly.Composed
 
         creationDate =
             case creationDateTags of
@@ -69,7 +74,6 @@ view store h1Link assemblage =
                 .childAssemblageId
                 .assemblageId
                 Assembly.Reconstructed
-                Assemblage.Person
 
         reconstructedByHeader =
             case reconstructors of

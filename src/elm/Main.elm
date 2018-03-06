@@ -33,21 +33,23 @@ import Html.Events
         )
 import Http
 import Navigation
-import Jwt
 import Dict
 import Page.Root
 import Page.NotFound
+import Page.Disconnected
 import Page.Assemblage
 import Page.Assemblages
 import Page.NewSession
 import Page.Stats
+import Page.Profile
 import Components.Html exposing (..)
 import Components.FontAwesome exposing (..)
 import Components.Flash as Flash
 import Components.Player as Player
 import Data.Assemblage exposing (Assemblage)
 import Routing
-import Server
+import Connection
+import Connection.Server as Server
 import Celeste
 import Json.Decode as JD
 import View.Common
@@ -58,7 +60,6 @@ import View.Common
         , threeBars
         , githubLink
         )
-import Store
 import Messages exposing (..)
 import I18n exposing (t)
 
@@ -78,7 +79,8 @@ main =
 
 
 type alias Flags =
-    { token : Maybe String
+    { endpoint : Maybe String
+    , token : Maybe String
     }
 
 
@@ -86,19 +88,19 @@ type alias Model =
     { routing : Routing.Model
     , language : I18n.Language
     , flash : Flash.Model
-    , server : Server.Model
+    , connection : Connection.Model
     , player : Player.Model
     }
 
 
 init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
-init { token } navLoc =
+init { endpoint, token } navLoc =
     let
         model_ =
             { routing = Routing.initialModel
             , language = I18n.English
             , flash = Flash.initialModel
-            , server = Server.initialModel navLoc.origin token
+            , connection = Connection.initialModel endpoint token
             , player = Player.initialModel
             }
 
@@ -129,38 +131,43 @@ update msg model =
                 ( { model | flash = updatedFlash }, Cmd.map FlashMsg cmd )
 
         PlayerMsg msg ->
-            let
-                ( updatedPlayer, cmd ) =
-                    Player.update msg model.player model.server.endpoint
-            in
-                ( { model | player = updatedPlayer }, Cmd.map PlayerMsg cmd )
+            case model.connection.currentServer of
+                Nothing ->
+                    ( model, Cmd.none )
 
-        ServerMsg msg ->
-            let
-                ( updatedServer, cmd ) =
-                    Server.update msg model.server
-            in
-                ( { model | server = updatedServer }, Cmd.map ServerMsg cmd )
+                Just server ->
+                    let
+                        ( player_, cmd ) =
+                            Player.update msg model.player server.endpoint
+                    in
+                        ( { model | player = player_ }, Cmd.map PlayerMsg cmd )
 
-        HangUp outcome ->
+        ConnectionMsg msg ->
+            let
+                ( updatedConnection, cmd ) =
+                    Connection.update msg model.connection
+            in
+                ( { model | connection = updatedConnection }, Cmd.map ConnectionMsg cmd )
+
+        HangUp ( outcome, route ) ->
             case outcome of
-                Ok ( celesteTuple, route ) ->
+                Ok celesteTuple ->
                     let
                         ( model_, cmd_ ) =
-                            update (ServerMsg (Server.StoreRecords celesteTuple)) model
+                            update (ConnectionMsg << Connection.ServerMsg << Server.StoreRecords <| celesteTuple) model
 
                         ( model__, cmd__ ) =
                             update (RoutingMsg (Routing.FinishTransition (Just route))) model_
                     in
                         ( model__, Cmd.batch [ cmd_, cmd__ ] )
 
-                Err error ->
+                Err string ->
                     let
                         ( model_, cmd_ ) =
-                            update (FlashMsg (Flash.DeriveFromString error)) model
+                            update (FlashMsg (Flash.DeriveFromString string)) model
 
                         ( model__, cmd__ ) =
-                            update (RoutingMsg (Routing.FinishTransition Nothing)) model_
+                            update (RoutingMsg (Routing.FinishTransition (Just route))) model_
                     in
                         ( model__, Cmd.batch [ cmd_, cmd__ ] )
 
@@ -195,21 +202,26 @@ update msg model =
                             SignInFail error
 
                 cmd =
-                    case model.server.state of
-                        Server.Disconnected wannabe ->
-                            wannabe
-                                |> Server.signIn model.server.endpoint
-                                |> Http.send responseToMsg
-
-                        Server.Connected _ _ ->
+                    case model.connection.currentServer of
+                        Nothing ->
                             Cmd.none
+
+                        Just server ->
+                            case server.state of
+                                Server.Authenticated _ _ ->
+                                    Cmd.none
+
+                                Server.NotAuthenticated wannabe ->
+                                    wannabe
+                                        |> Server.signIn server.endpoint
+                                        |> Http.send responseToMsg
             in
                 ( model, cmd )
 
         SignInSucceed user ->
             let
                 ( model_, serverCmd ) =
-                    update (ServerMsg (Server.SignInSucceed user)) model
+                    update (ConnectionMsg << Connection.ServerMsg << Server.SignInSucceed <| user) model
 
                 ( model__, redirect ) =
                     update (SetRoute Routing.Root) model_
@@ -242,14 +254,25 @@ view : Model -> Html Msg
 view model =
     case model.routing.currentRoute of
         Just route ->
-            withLayout model (routeToPage route model)
+            case model.connection.currentServer of
+                Just server ->
+                    withLayout model (routeToPage server model.language route)
+
+                Nothing ->
+                    withOverlay model.routing.transitioning <|
+                        case route of
+                            Routing.Root ->
+                                Page.Disconnected.view model.connection.wannabeEndpoint model.language
+
+                            _ ->
+                                Page.NotFound.view model.language
 
         Nothing ->
             withOverlay model.routing.transitioning []
 
 
-routeToPage : Routing.Route -> Model -> List (Html Msg)
-routeToPage route { language, server } =
+routeToPage : Server.Model -> I18n.Language -> Routing.Route -> List (Html Msg)
+routeToPage server language route =
     case route of
         Routing.Root ->
             Page.Root.view server.endpoint language
@@ -260,9 +283,12 @@ routeToPage route { language, server } =
         Routing.Stats ->
             Page.Stats.view server language
 
+        Routing.Profile ->
+            Page.Profile.view server language
+
         Routing.Composers ->
             case server.state of
-                Server.Connected _ store ->
+                Server.Authenticated _ store ->
                     store.assemblages
                         |> Dict.filter (always Data.Assemblage.isComposer)
                         |> Dict.toList
@@ -270,20 +296,20 @@ routeToPage route { language, server } =
                         |> List.sortBy .name
                         |> Page.Assemblages.view
 
-                Server.Disconnected _ ->
+                Server.NotAuthenticated _ ->
                     Page.NotFound.view language
 
         Routing.Assemblage id _ ->
             case server.state of
-                Server.Connected _ store ->
+                Server.Authenticated _ store ->
                     case Dict.get id store.assemblages of
                         Just assemblage ->
-                            Page.Assemblage.view assemblage language store
+                            Page.Assemblage.view server.endpoint assemblage language store
 
                         Nothing ->
                             Page.NotFound.view language
 
-                Server.Disconnected _ ->
+                Server.NotAuthenticated _ ->
                     Page.NotFound.view language
 
 
@@ -324,16 +350,21 @@ withLayout model content =
                 ]
 
         leftNav =
-            case model.server.state of
-                Server.Connected _ _ ->
-                    [ ul [ class "nav navbar-nav" ]
-                        [ li []
-                            [ navLink Routing.Composers [] (t model.language I18n.Composers) ]
-                        ]
-                    ]
-
-                Server.Disconnected _ ->
+            case model.connection.currentServer of
+                Nothing ->
                     []
+
+                Just server ->
+                    case server.state of
+                        Server.NotAuthenticated _ ->
+                            []
+
+                        Server.Authenticated _ _ ->
+                            [ ul [ class "nav navbar-nav" ]
+                                [ li []
+                                    [ navLink Routing.Composers [] (t model.language I18n.Composers) ]
+                                ]
+                            ]
 
         languageRow lang =
             li []
@@ -364,34 +395,59 @@ withLayout model content =
             ]
 
         authRightNavContent =
-            case model.server.state of
-                Server.Connected { username } _ ->
-                    [ li [ class "dropdown" ]
-                        [ a
-                            ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
-                                ++ data [ ( "toggle", "dropdown" ) ]
-                                ++ aria [ ( "haspopup", "true" ), ( "expanded", "false" ) ]
-                            )
-                            [ fa "user-circle-o", text username ]
-                        , ul [ class "dropdown-menu" ]
+            case model.connection.currentServer of
+                Nothing ->
+                    []
+
+                Just server ->
+                    let
+                        serverMenu =
+                            case server.state of
+                                Server.NotAuthenticated _ ->
+                                    [ li []
+                                        [ navLink Routing.NewSession [] (fa "sign-in" :: text " " :: t model.language I18n.SignIn) ]
+                                    ]
+
+                                Server.Authenticated { username } _ ->
+                                    [ li [] [ navLink Routing.Profile [] (fa "user" :: t model.language I18n.Profile) ]
+                                    , li [] [ navLink Routing.Stats [] (fa "bar-chart" :: t model.language I18n.Stats) ]
+                                    , divider
+                                    , li []
+                                        [ a [ href "#", onClick (ConnectionMsg << Connection.ServerMsg <| Server.SignOut) ]
+                                            (fa "sign-out" :: t model.language I18n.SignOut)
+                                        ]
+                                    ]
+
+                        toggleContent =
+                            case server.state of
+                                Server.NotAuthenticated _ ->
+                                    [ fa "circle-thin", text "..." ]
+
+                                Server.Authenticated { username } _ ->
+                                    [ fa "circle", text username ]
+
+                        toggle =
+                            a
+                                ([ href "#", class "dropdown-toggle", attribute "role" "button" ]
+                                    ++ data [ ( "toggle", "dropdown" ) ]
+                                    ++ aria [ ( "haspopup", "true" ), ( "expanded", "false" ) ]
+                                )
+                                toggleContent
+
+                        connectionMenu =
                             [ li []
-                                [ navLink Routing.Stats
-                                    []
-                                    (fa "bar-chart" :: t model.language I18n.Stats)
-                                ]
-                            , li [ class "divider", attribute "role" "separator" ] []
-                            , li []
-                                [ a [ href "#", onClick (ServerMsg Server.SignOut) ]
-                                    (fa "sign-out" :: t model.language I18n.SignOut)
+                                [ a [ href "#", onClick (ConnectionMsg Connection.Disconnect) ]
+                                    (fa "chain-broken" :: [ text "Disconnect" ])
                                 ]
                             ]
-                        ]
-                    ]
 
-                Server.Disconnected _ ->
-                    [ li []
-                        [ navLink Routing.NewSession [] (fa "sign-in" :: text " " :: t model.language I18n.SignIn) ]
-                    ]
+                        divider =
+                            li [ class "divider", attribute "role" "separator" ] []
+
+                        dropdownMenu =
+                            ul [ class "dropdown-menu" ] (serverMenu ++ divider :: connectionMenu)
+                    in
+                        [ li [ class "dropdown" ] [ toggle, dropdownMenu ] ]
 
         navbar =
             nav [ class "navbar navbar-default" ]
@@ -400,7 +456,8 @@ withLayout model content =
                     , div [ class "collapse navbar-collapse" ]
                         (leftNav
                             ++ [ ul [ class "nav navbar-nav navbar-right" ]
-                                    (languageSwitch ++ authRightNavContent)
+                                    -- (languageSwitch ++ authRightNavContent)
+                                    authRightNavContent
                                ]
                         )
                     ]
@@ -413,12 +470,12 @@ withLayout model content =
                 )
 
         footer_ =
-            footer [ class "container" ]
-                [ hr [] []
-                , p []
-                    (text "Powered by " :: githubLink "lacrosse" "scriabin" ++ text " and " :: githubLink "lacrosse" "celeste")
-                ]
+            footer [ class "container" ] []
 
+        -- [ hr [] []
+        -- , p []
+        --     (text "Powered by " :: githubLink "lacrosse" "scriabin" ++ text " and " :: githubLink "lacrosse" "celeste")
+        -- ]
         player =
             List.map (Html.map PlayerMsg) (Player.view model.player)
     in
@@ -429,59 +486,51 @@ withLayout model content =
 -- FUNCTIONS
 
 
-respToMsg : Routing.Route -> Result Jwt.JwtError Celeste.Response -> Msg
-respToMsg route response =
-    case response of
-        Ok value ->
-            HangUp <| Ok <| ( Celeste.responseToTuple value, route )
+celesteRouteForAppRoute : Routing.Route -> Maybe Celeste.Route
+celesteRouteForAppRoute route =
+    case route of
+        Routing.Assemblage id _ ->
+            Just (Celeste.Assemblage id)
 
-        Err err ->
-            HangUp <|
-                Err <|
-                    case err of
-                        Jwt.HttpError (Http.BadPayload val _) ->
-                            val
+        Routing.Composers ->
+            Just (Celeste.Composers)
 
-                        error ->
-                            toString error
-
-
-routeToCelesteRoute : Routing.Route -> Maybe ( Celeste.Route, Result Jwt.JwtError Celeste.Response -> Msg )
-routeToCelesteRoute route =
-    Maybe.map (flip (,) (respToMsg route)) <|
-        case route of
-            Routing.Assemblage id _ ->
-                Just (Celeste.Assemblage id)
-
-            Routing.Composers ->
-                Just (Celeste.Composers)
-
-            _ ->
-                Nothing
+        _ ->
+            Nothing
 
 
 processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
-processLocation navLoc model =
-    let
-        appRoute =
-            Routing.locationToRoute navLoc
+processLocation location model =
+    case model.connection.currentServer of
+        Nothing ->
+            update (RoutingMsg <| Routing.FinishTransition <| Just Routing.Root) model
 
-        fetch ( cRoute, msg ) =
-            cRoute
-                |> Store.fetch msg model.server.endpoint
-                |> Server.authorize model.server
-    in
-        case
-            appRoute
-                |> Maybe.andThen routeToCelesteRoute
-                |> Maybe.andThen fetch
-        of
-            Just cmd ->
-                let
-                    ( model_, routingCmd ) =
-                        update (RoutingMsg Routing.StartTransition) model
-                in
-                    ( model_, Cmd.batch [ routingCmd, cmd ] )
+        Just server ->
+            let
+                maybeAppRoute =
+                    Routing.locationToRoute location
 
-            Nothing ->
-                ( { model | routing = { currentRoute = appRoute, transitioning = False } }, Cmd.none )
+                handleAppRoute route =
+                    let
+                        resultHandler cRes =
+                            HangUp ( Celeste.resultToOutcome cRes, route )
+                    in
+                        route
+                            |> celesteRouteForAppRoute
+                            |> Maybe.map (\celesteRoute -> ( celesteRoute, resultHandler ))
+
+                fetchWrapper fetch endpoint jwt =
+                    maybeAppRoute
+                        |> Maybe.andThen handleAppRoute
+                        |> Maybe.andThen (\( celesteRoute, resultHandler ) -> fetch celesteRoute resultHandler endpoint jwt)
+            in
+                case Server.maybeAuthenticatedFetchAndHandle fetchWrapper server of
+                    Just fetchAndHandleCmd ->
+                        let
+                            ( model_, startTransitionCmd ) =
+                                update (RoutingMsg Routing.StartTransition) model
+                        in
+                            ( model_, Cmd.batch [ startTransitionCmd, fetchAndHandleCmd ] )
+
+                    Nothing ->
+                        update (RoutingMsg <| Routing.FinishTransition maybeAppRoute) model

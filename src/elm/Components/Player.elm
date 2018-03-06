@@ -3,10 +3,13 @@ port module Components.Player exposing (..)
 import Html exposing (Html, ul, p, text, li, a, div, nav, span)
 import Html.Attributes exposing (class, accesskey, href, attribute, style)
 import Components.Html exposing (data, aria)
+import Components.PageTitle
+import Components.FontAwesome exposing (fa)
 import Html.Events exposing (onWithOptions)
+import Events exposing (onMouseUpRelativeWidth)
 import Json.Decode as JD
 import Json.Encode as JE
-import Components.FontAwesome exposing (fa)
+import Data.Assemblage exposing (Assemblage)
 import Data.File exposing (File)
 
 
@@ -36,9 +39,11 @@ type Msg
     = Stop
     | Pause
     | Play
+    | Seek Float
     | Backward
     | Forward
-    | Update (List File) File
+    | Update Assemblage
+    | UpdateSplitFiles (List File) File
     | Append (List File)
     | Sync JD.Value
 
@@ -49,40 +54,47 @@ port webAudioControl : JE.Value -> Cmd msg
 toWebAudioCommand : String -> Model -> JE.Value
 toWebAudioCommand endpoint player =
     case player of
-        Working state ( time, _ ) file _ next ->
-            case state of
-                Playing ->
-                    let
-                        default =
-                            ( "action", JE.string "play" )
-                                :: ( "time", JE.float time )
-                                :: fileTuples file endpoint
+        Working state ( time, _ ) file _ _ ->
+            let
+                action =
+                    case state of
+                        Playing ->
+                            "play"
 
-                        tail =
-                            case List.head next of
-                                Just nextFile ->
-                                    [ ( "next", JE.object (fileTuples nextFile endpoint) ) ]
-
-                                Nothing ->
-                                    []
-                    in
-                        JE.object (default ++ tail)
-
-                Paused ->
-                    JE.object ([ ( "action", JE.string "pause" ), ( "time", JE.float time ) ] ++ fileTuples file endpoint)
+                        Paused ->
+                            "pause"
+            in
+                JE.object (( "action", JE.string action ) :: ( "time", JE.float time ) :: Data.File.toJsonList endpoint file)
 
         Stopped ->
             JE.object [ ( "action", JE.string "stop" ) ]
 
 
 syncWebAudio : String -> Model -> Cmd Msg
-syncWebAudio =
-    (<<) webAudioControl << toWebAudioCommand
+syncWebAudio endpoint player =
+    (webAudioControl << toWebAudioCommand endpoint) player
 
 
 commandNature : Model -> String -> ( Model, Cmd Msg )
 commandNature model endpoint =
-    ( model, syncWebAudio endpoint model )
+    let
+        titleCmd =
+            case model of
+                Working state _ current _ _ ->
+                    case state of
+                        Playing ->
+                            Components.PageTitle.set ("▶️ " ++ current.name)
+
+                        Paused ->
+                            Components.PageTitle.set ("⏸ " ++ current.name)
+
+                Stopped ->
+                    Components.PageTitle.reset
+
+        webAudioCmd =
+            syncWebAudio endpoint model
+    in
+        ( model, Cmd.batch ([ titleCmd, webAudioCmd ]) )
 
 
 update : Msg -> Model -> String -> ( Model, Cmd Msg )
@@ -105,6 +117,18 @@ update msg model endpoint =
                     commandNature (Working Playing time file previous next) endpoint
 
                 _ ->
+                    ( model, Cmd.none )
+
+        Seek newProgressRelative ->
+            case model of
+                Working state ( _, dur ) file previous next ->
+                    let
+                        newTime =
+                            dur * newProgressRelative
+                    in
+                        commandNature (Working state ( newTime, dur ) file previous next) endpoint
+
+                Stopped ->
                     ( model, Cmd.none )
 
         Backward ->
@@ -136,7 +160,15 @@ update msg model endpoint =
                 Stopped ->
                     ( model, Cmd.none )
 
-        Update files file ->
+        Update assemblage ->
+            case Data.Assemblage.childrenFiles assemblage of
+                [] ->
+                    ( model, Cmd.none )
+
+                file :: next ->
+                    commandNature (Working Playing ( 0, 1 ) file [] next) endpoint
+
+        UpdateSplitFiles files file ->
             let
                 ( previous, next ) =
                     splitList files file
@@ -159,12 +191,12 @@ update msg model endpoint =
         Sync jvalue ->
             let
                 time =
-                    Result.withDefault 0 (JD.decodeValue (JD.field "offset" JD.float) jvalue)
+                    (Result.withDefault 0 << JD.decodeValue (JD.field "offset" JD.float)) jvalue
 
                 dur =
-                    Result.withDefault 1 (JD.decodeValue (JD.field "progress" JD.float) jvalue)
+                    (Result.withDefault 1 << JD.decodeValue (JD.field "progress" JD.float)) jvalue
             in
-                case JD.decodeValue (JD.field "state" JD.string) jvalue of
+                case jvalue |> JD.decodeValue (JD.field "state" JD.string) of
                     Ok "paused" ->
                         case model of
                             Working _ _ file previous next ->
@@ -176,24 +208,7 @@ update msg model endpoint =
                     Ok "playing" ->
                         case model of
                             Working _ _ file previous next ->
-                                case JD.decodeValue (JD.field "remaining" JD.float) jvalue of
-                                    Ok remaining ->
-                                        if remaining <= 5 then
-                                            let
-                                                cmd =
-                                                    case List.head next of
-                                                        Just nextFile ->
-                                                            (webAudioControl << JE.object << (::) ( "action", JE.string "preload" )) (fileTuples nextFile endpoint)
-
-                                                        Nothing ->
-                                                            Cmd.none
-                                            in
-                                                ( Working Playing ( time, dur ) file previous next, cmd )
-                                        else
-                                            ( Working Playing ( time, dur ) file previous next, Cmd.none )
-
-                                    Err _ ->
-                                        ( Working Playing ( time, dur ) file previous next, Cmd.none )
+                                ( Working Playing ( time, dur ) file previous next, Cmd.none )
 
                             Stopped ->
                                 ( model, Cmd.none )
@@ -210,6 +225,9 @@ update msg model endpoint =
 
                             Stopped ->
                                 ( Stopped, Cmd.none )
+
+                    Ok "stopped" ->
+                        ( Stopped, Cmd.none )
 
                     _ ->
                         ( model, Cmd.none )
@@ -233,164 +251,141 @@ subscriptions _ =
 
 view : Model -> List (Html Msg)
 view model =
-    let
-        pad =
-            String.padLeft 2 '0' << toString
+    case model of
+        Stopped ->
+            []
 
-        toHumanTime secs =
-            pad (secs // 60) ++ ":" ++ pad (rem secs 60)
+        Working state time file previous next ->
+            let
+                pad =
+                    String.padLeft 2 '0' << toString
 
-        describe txt time =
-            txt ++ " (" ++ (toHumanTime << floor) time ++ ")"
+                toHumanTime secs =
+                    pad (secs // 60) ++ ":" ++ pad (rem secs 60)
 
-        description txt ( time, dur ) controls =
-            ul [ class "nav navbar-nav navbar-left" ]
-                (controls
-                    ++ [ p [ class "navbar-text" ]
-                            [ text (describe txt time)
-                            , div [ class "progress progress-player" ]
-                                [ div
-                                    ([ class "progress-bar progress-bar-info"
-                                     , style [ ( "width", toString (time / dur * 100) ++ "%" ) ]
-                                     , attribute "role" "progressbar"
-                                     ]
-                                        ++ aria
-                                            [ ( "valuenow", toString time )
-                                            , ( "valuemin", "0" )
-                                            , ( "valuemax", toString dur )
-                                            ]
-                                    )
-                                    []
-                                ]
+                describe txt time =
+                    txt ++ " (" ++ (toHumanTime << floor) time ++ ")"
+
+                control icon msg key disabled_ =
+                    li
+                        (if disabled_ then
+                            [ class "disabled" ]
+                         else
+                            []
+                        )
+                        [ a
+                            [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg)
+                            , accesskey key
                             ]
-                       ]
-                )
-
-        control icon msg key disabled_ =
-            li
-                (if disabled_ then
-                    [ class "disabled" ]
-                 else
-                    []
-                )
-                [ a
-                    [ onWithOptions "click" { stopPropagation = True, preventDefault = True } (JD.succeed msg)
-                    , accesskey key
-                    ]
-                    [ fa icon ]
-                ]
-
-        backwardControl previous =
-            control "backward" Backward 'z' (List.isEmpty previous)
-
-        stopControl =
-            control "stop" Stop 'x' False
-
-        playPauseControl state =
-            case state of
-                Playing ->
-                    control "pause" Pause 'c' False
-
-                Paused ->
-                    control "play" Play 'c' False
-
-        forwardControl next =
-            control "forward" Forward 'v' (List.isEmpty next)
-    in
-        case model of
-            Stopped ->
-                []
-
-            Working state time file previous next ->
-                let
-                    allFiles =
-                        List.foldl (::) (file :: next) previous
-
-                    playlistRow file =
-                        li []
-                            [ a
-                                [ onWithOptions "click"
-                                    { stopPropagation = True
-                                    , preventDefault = True
-                                    }
-                                    (JD.succeed (Update allFiles file))
-                                ]
-                                [ text file.name ]
-                            ]
-
-                    history =
-                        case previous of
-                            [] ->
-                                []
-
-                            val ->
-                                li [ class "dropdown-header" ] [ text "history" ]
-                                    :: (List.map playlistRow << List.reverse << List.take 2) val
-
-                    current =
-                        [ li [ class "dropdown-header" ] [ text "now playing" ]
-                        , li [ class "disabled" ] [ a [] [ text file.name ] ]
+                            [ fa icon ]
                         ]
 
-                    upcoming =
-                        case next of
-                            [] ->
-                                []
+                backwardControl previous =
+                    control "backward" Backward 'z' (List.isEmpty previous)
 
-                            val ->
-                                [ li [ class "dropdown-header" ] [ text "up next" ] ]
-                                    ++ List.map playlistRow val
+                stopControl =
+                    control "stop" Stop 'x' False
 
-                    playlist =
-                        history ++ current ++ upcoming
-                in
-                    [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
-                        [ div [ class "container" ]
-                            [ description file.name
-                                time
-                                [ backwardControl previous
-                                , stopControl
-                                , playPauseControl state
-                                , forwardControl next
-                                ]
-                            , ul [ class "nav navbar-nav navbar-right" ]
-                                [ li [ class "dropdown" ]
-                                    [ a
-                                        ([ href "#"
-                                         , class "dropdown-toggle"
-                                         , attribute "role" "button"
-                                         ]
-                                            ++ data
-                                                [ ( "toggle", "dropdown" )
-                                                ]
-                                            ++ aria
-                                                [ ( "haspopup", "true" )
-                                                , ( "expanded", "false" )
-                                                ]
-                                        )
-                                        [ fa "list" ]
-                                    , ul [ class "dropdown-menu dropdown-scrollable" ] playlist
+                playPauseControl state =
+                    let
+                        ( icon, msg ) =
+                            case state of
+                                Playing ->
+                                    ( "pause", Pause )
+
+                                Paused ->
+                                    ( "play", Play )
+                    in
+                        control icon msg 'c' False
+
+                forwardControl next =
+                    control "forward" Forward 'v' (List.isEmpty next)
+
+                description txt ( time, dur ) state previous next =
+                    ul [ class "nav navbar-nav navbar-left" ]
+                        ([ backwardControl previous
+                         , stopControl
+                         , playPauseControl state
+                         , forwardControl next
+                         ]
+                            ++ [ p [ class "navbar-text" ]
+                                    [ text (describe txt time)
+                                    , div [ class "progress progress-player", onMouseUpRelativeWidth Seek ]
+                                        [ div
+                                            ([ class "progress-bar progress-bar-info progress-bar-player"
+                                             , style [ ( "width", toString (time / dur * 100) ++ "%" ) ]
+                                             , attribute "role" "progressbar"
+                                             ]
+                                                ++ aria
+                                                    [ ( "valuenow", toString time )
+                                                    , ( "valuemin", "0" )
+                                                    , ( "valuemax", toString dur )
+                                                    ]
+                                            )
+                                            []
+                                        ]
                                     ]
+                               ]
+                        )
+
+                allFiles =
+                    List.foldl (::) (file :: next) previous
+
+                playlistRow file =
+                    li []
+                        [ a
+                            [ onWithOptions "click"
+                                { stopPropagation = True
+                                , preventDefault = True
+                                }
+                                (JD.succeed (UpdateSplitFiles allFiles file))
+                            ]
+                            [ text file.name ]
+                        ]
+
+                history =
+                    (List.map playlistRow << List.reverse << List.take 2) previous
+
+                current =
+                    [ li [ class "disabled" ]
+                        [ a []
+                            [ span [ class "la-line-scale-party la-dark la-sm", style [ ( "display", "inline" ) ] ]
+                                (List.repeat 5 (div [] []))
+                            , text (" " ++ file.name)
+                            ]
+                        ]
+                    ]
+
+                upcoming =
+                    List.map playlistRow next
+
+                playlist =
+                    history ++ current ++ upcoming
+            in
+                [ nav [ class "navbar navbar-default navbar-fixed-bottom" ]
+                    [ div [ class "container" ]
+                        [ description file.name time state previous next
+                        , ul [ class "nav navbar-nav navbar-right" ]
+                            [ li [ class "dropdown" ]
+                                [ a
+                                    ([ href "#"
+                                     , class "dropdown-toggle"
+                                     , attribute "role" "button"
+                                     ]
+                                        ++ data [ ( "toggle", "dropdown" ) ]
+                                        ++ aria [ ( "haspopup", "true" ), ( "expanded", "false" ) ]
+                                    )
+                                    [ fa "list" ]
+                                , ul [ class "dropdown-menu dropdown-scrollable" ] playlist
                                 ]
                             ]
                         ]
                     ]
+                ]
 
 
 
 -- FUNCTIONS
-
-
-fileUrl : String -> String -> String
-fileUrl endpoint path =
-    endpoint ++ "/files/" ++ path
-
-
-fileTuples : File -> String -> List ( String, JE.Value )
-fileTuples file endpoint =
-    [ ( "url", JE.string (fileUrl endpoint file.path) )
-    , ( "id", JE.int file.id )
-    ]
 
 
 splitList : List a -> a -> ( List a, List a )

@@ -4,14 +4,11 @@ import Http
 import Components.Flash as Flash
 import Routing
 import Navigation
-import Server
+import Connection
+import Connection.Server as Server
 import Celeste
 import I18n
 import Components.Player as Player
-
-
-type alias ConversationOutcome =
-    Result String ( Celeste.ResponseTuple, Routing.Route )
 
 
 type Msg
@@ -21,9 +18,9 @@ type Msg
     | SignInSucceed Server.User
     | SignInFail Http.Error
     | FlashMsg Flash.Msg
-    | HangUp ConversationOutcome
+    | HangUp ( Celeste.Outcome, Routing.Route )
     | SetRoute Routing.Route
     | RoutingMsg Routing.Msg
     | VisitLocation Navigation.Location
     | PlayerMsg Player.Msg
-    | ServerMsg Server.Msg
+    | ConnectionMsg Connection.Msg

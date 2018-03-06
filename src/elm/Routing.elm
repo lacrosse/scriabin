@@ -11,6 +11,7 @@ import Regex
 type Route
     = Root
     | NewSession
+    | Profile
     | Stats
     | Composers
     | Assemblage Int String
@@ -44,13 +45,8 @@ update msg model =
         StartTransition ->
             ( { model | transitioning = True }, Cmd.none )
 
-        FinishTransition mRoute ->
-            case mRoute of
-                Just route ->
-                    ( { model | currentRoute = Just route, transitioning = False }, Cmd.none )
-
-                Nothing ->
-                    ( { model | transitioning = False }, Cmd.none )
+        FinishTransition maybeRoute ->
+            ( { model | currentRoute = maybeRoute, transitioning = False }, Cmd.none )
 
 
 
@@ -75,6 +71,7 @@ routingTable =
     [ map (flip Assemblage "") (s "assemblages" </> basedInt)
     , map NewSession (s "sign-in")
     , map Stats (s "stats")
+    , map Profile (s "profile")
     , map Composers (s "composers")
     , map Root (top)
     ]
@@ -95,6 +92,9 @@ routeToString route =
 
         NewSession ->
             "#/sign-in"
+
+        Profile ->
+            "#/profile"
 
         Stats ->
             "#/stats"
