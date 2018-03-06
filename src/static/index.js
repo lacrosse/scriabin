@@ -107,10 +107,12 @@ window.player = {
     });
   },
 
-  pause: function (url) {
+  pause: function (url, time) {
     var h = this.currentHowl;
 
     h.pause();
+
+    h.seek(time);
 
     this.sync({
       state: 'paused',
@@ -132,7 +134,7 @@ window.ScriabinApp.ports.webAudioControl.subscribe(function (object) {
   if (object.action == 'play') {
     window.player.play(object.url, object.id, object.time);
   } else if (object.action == 'pause') {
-    window.player.pause(object.url);
+    window.player.pause(object.url, object.time);
   } else if (object.action == 'stop') {
     window.player.stop();
   } else {
