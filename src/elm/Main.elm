@@ -38,7 +38,7 @@ import Page.Root
 import Page.NotFound
 import Page.Disconnected
 import Page.Assemblage
-import Page.Assemblages
+import Page.Composers
 import Page.NewSession
 import Page.Stats
 import Page.Profile
@@ -46,7 +46,6 @@ import Components.Html exposing (..)
 import Components.FontAwesome exposing (..)
 import Components.Flash as Flash
 import Components.Player as Player
-import Data.Assemblage exposing (Assemblage)
 import Routing
 import Connection
 import Connection.Server as Server
@@ -289,12 +288,7 @@ routeToPage server language route =
         Routing.Composers ->
             case server.state of
                 Server.Authenticated _ store ->
-                    store.assemblages
-                        |> Dict.filter (always Data.Assemblage.isComposer)
-                        |> Dict.toList
-                        |> List.map Tuple.second
-                        |> List.sortBy .name
-                        |> Page.Assemblages.view
+                    Page.Composers.view store
 
                 Server.NotAuthenticated _ ->
                     Page.NotFound.view language
