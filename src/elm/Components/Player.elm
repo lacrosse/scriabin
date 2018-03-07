@@ -226,7 +226,7 @@ update msg model endpoint =
                                         commandNature (Working Playing ( 0, 1 ) file_ (file :: previous) next_) endpoint
 
                                     _ ->
-                                        ( Stopped, Cmd.none )
+                                        ( Stopped, toTitleCmd Stopped )
 
                             Stopped ->
                                 ( Stopped, Cmd.none )
