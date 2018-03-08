@@ -261,7 +261,7 @@ routeToPage server language route =
             Page.NewSession.view server language
 
         Routing.Stats ->
-            Page.Stats.view server language
+            Page.Stats.view language
 
         Routing.Profile ->
             Page.Profile.view server language

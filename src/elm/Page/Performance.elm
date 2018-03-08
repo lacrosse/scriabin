@@ -13,20 +13,18 @@ import I18n
 
 view :
     Assemblage
-    -> List Assemblage
-    -> List Assemblage
-    -> List ( Assemblage, List Tag )
+    -> List ( Assemblage, List Assemblage, List Assemblage, List Tag )
     -> List Assemblage
     -> List Assemblage
     -> List File
     -> I18n.Language
     -> String
     -> List (Html Msg)
-view performance composers reconstructors compositionsWithTags performers generics files language endpoint =
+view performance compositionsWithComposersReconstructorsAndTags performers generics files language endpoint =
     let
         inheritedHeader =
-            compositionsWithTags
-                |> List.map (\( composition, tags ) -> (Tuple.first << View.Composition.Header.view True composers reconstructors tags) composition)
+            compositionsWithComposersReconstructorsAndTags
+                |> List.map (\( composition, composers, reconstructors, tags ) -> (Tuple.first << View.Composition.Header.view True composers reconstructors tags) composition)
                 |> List.foldr (++) []
 
         mainPerformanceHeader =

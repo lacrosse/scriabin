@@ -11,7 +11,7 @@ import Regex
 type Kind
     = Person
     | Composition
-    | Recording
+    | Performance
     | Generic
 
 
@@ -48,7 +48,7 @@ parseKind maybeString =
             Composition
 
         Just "recording" ->
-            Recording
+            Performance
 
         _ ->
             Generic

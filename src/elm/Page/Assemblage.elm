@@ -14,21 +14,30 @@ import Store exposing (Store)
 view : Assemblage -> Store -> I18n.Language -> String -> List (Html Msg)
 view assemblage store =
     let
-        joinAssemblagesThrough =
+        joinAssemblagesThrough assemblage =
+            Store.assemblagesThroughAssemblies store assemblage
+
+        parentAssemblages assemblage =
+            joinAssemblagesThrough assemblage ( .childAssemblageId, .assemblageId )
+
+        childrenAssemblages assemblage =
+            joinAssemblagesThrough assemblage ( .assemblageId, .childAssemblageId )
+
+        composersFor assemblage =
+            parentAssemblages assemblage Assembly.Composed
+
+        reconstructorsFor assemblage =
+            parentAssemblages assemblage Assembly.Reconstructed
+
+        tagsFor assemblage =
             assemblage
-                |> Store.assemblagesThroughAssemblies store
+                |> Store.project store ( .tagIds, .tags )
 
-        parentAssemblages =
-            joinAssemblagesThrough ( .childAssemblageId, .assemblageId )
-
-        childrenAssemblages =
-            joinAssemblagesThrough ( .assemblageId, .childAssemblageId )
-
-        composers =
-            parentAssemblages Assembly.Composed
+        parentComposers =
+            composersFor assemblage
 
         reconstructors =
-            parentAssemblages Assembly.Reconstructed
+            reconstructorsFor assemblage
 
         files =
             assemblage
@@ -36,46 +45,45 @@ view assemblage store =
                 |> List.sortBy .name
 
         childrenCompositions =
-            childrenAssemblages Assembly.Composed
+            childrenAssemblages assemblage Assembly.Composed
 
         childrenPerformances =
-            childrenAssemblages Assembly.Performed
+            childrenAssemblages assemblage Assembly.Performed
 
         reconstructions =
-            childrenAssemblages Assembly.Reconstructed
-
-        tagsFor assemblage =
-            assemblage
-                |> Store.project store ( .tagIds, .tags )
-
-        tags =
-            tagsFor assemblage
+            childrenAssemblages assemblage Assembly.Reconstructed
 
         parentCompositions =
-            parentAssemblages Assembly.EmbodiedBy
-
-        parentCompositionsWithTags =
-            parentCompositions
-                |> List.map (\composition -> ( composition, tagsFor composition ))
+            parentAssemblages assemblage Assembly.EmbodiedBy
 
         embodiments =
-            childrenAssemblages Assembly.EmbodiedBy
+            childrenAssemblages assemblage Assembly.EmbodiedBy
 
         performers =
-            parentAssemblages Assembly.Performed
+            parentAssemblages assemblage Assembly.Performed
 
         generics =
-            childrenAssemblages Assembly.Generic
+            childrenAssemblages assemblage Assembly.Generic
     in
         case assemblage.kind of
             Assemblage.Person ->
                 Page.Person.view childrenCompositions reconstructions childrenPerformances files assemblage
 
             Assemblage.Composition ->
-                Page.Composition.view composers reconstructors tags embodiments assemblage
+                Page.Composition.view
+                    parentComposers
+                    reconstructors
+                    (tagsFor assemblage)
+                    embodiments
+                    assemblage
 
-            Assemblage.Recording ->
-                Page.Performance.view assemblage composers reconstructors parentCompositionsWithTags performers generics files
+            Assemblage.Performance ->
+                Page.Performance.view
+                    assemblage
+                    (List.map (\c -> ( c, composersFor c, reconstructorsFor c, tagsFor c )) parentCompositions)
+                    performers
+                    generics
+                    files
 
             Assemblage.Generic ->
                 Page.Person.view childrenCompositions reconstructions childrenPerformances files assemblage
