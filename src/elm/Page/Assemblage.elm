@@ -15,21 +15,22 @@ import Dict
 view : Assemblage -> Store -> I18n.Language -> String -> List (Html Msg)
 view assemblage store =
     let
-        composers =
+        joinAssemblagesThrough =
             Store.assemblagesThroughAssemblies
                 store
                 assemblage
-                .childAssemblageId
-                .assemblageId
-                Assembly.Composed
+
+        parentAssemblagesThroughAssemblies =
+            joinAssemblagesThrough .childAssemblageId .assemblageId
+
+        childrenAssemblagesThroughAssemblies =
+            joinAssemblagesThrough .assemblageId .childAssemblageId
+
+        composers =
+            parentAssemblagesThroughAssemblies Assembly.Composed
 
         reconstructors =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .childAssemblageId
-                .assemblageId
-                Assembly.Reconstructed
+            parentAssemblagesThroughAssemblies Assembly.Reconstructed
 
         files =
             assemblage.fileIds
@@ -37,28 +38,13 @@ view assemblage store =
                 |> List.sortBy .name
 
         childrenCompositions =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .assemblageId
-                .childAssemblageId
-                Assembly.Composed
+            childrenAssemblagesThroughAssemblies Assembly.Composed
 
         childrenPerformances =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .assemblageId
-                .childAssemblageId
-                Assembly.Performed
+            childrenAssemblagesThroughAssemblies Assembly.Performed
 
         reconstructions =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .assemblageId
-                .childAssemblageId
-                Assembly.Reconstructed
+            childrenAssemblagesThroughAssemblies Assembly.Reconstructed
 
         tagsFor a =
             List.filterMap (flip Dict.get store.tags) a.tagIds
@@ -67,40 +53,20 @@ view assemblage store =
             tagsFor assemblage
 
         parentCompositions =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .childAssemblageId
-                .assemblageId
-                Assembly.EmbodiedBy
+            parentAssemblagesThroughAssemblies Assembly.EmbodiedBy
 
         parentCompositionsWithTags =
             parentCompositions
                 |> List.map (\composition -> ( composition, tagsFor composition ))
 
         embodiments =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .assemblageId
-                .childAssemblageId
-                Assembly.EmbodiedBy
+            childrenAssemblagesThroughAssemblies Assembly.EmbodiedBy
 
         performers =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .childAssemblageId
-                .assemblageId
-                Assembly.Performed
+            parentAssemblagesThroughAssemblies Assembly.Performed
 
         generics =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
-                .assemblageId
-                .childAssemblageId
-                Assembly.Generic
+            childrenAssemblagesThroughAssemblies Assembly.Generic
     in
         case assemblage.kind of
             Assemblage.Person ->
