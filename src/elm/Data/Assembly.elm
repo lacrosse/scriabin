@@ -8,7 +8,7 @@ import Json.Decode as JD
 
 type Kind
     = Composed
-    | Recorded
+    | EmbodiedBy
     | Reconstructed
     | Performed
     | Generic
@@ -32,7 +32,7 @@ parseKind maybeString =
             Composed
 
         Just "recorded" ->
-            Recorded
+            EmbodiedBy
 
         Just "performed" ->
             Performed

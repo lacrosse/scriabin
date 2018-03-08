@@ -1,31 +1,31 @@
 module View.Composition.Header exposing (view)
 
-import Data.Assembly as Assembly exposing (Assembly)
 import Data.Assemblage as Assemblage exposing (Assemblage)
 import Data.Tag exposing (Tag)
 import Html exposing (Html, text, h1, h3, h4, div)
 import Html.Attributes exposing (class)
 import Messages exposing (Msg)
-import Store exposing (Store, assemblagesThroughAssemblies)
 import View.Common
     exposing
         ( enumerateHuman
         , assemblageLink
         , enumerateLinks
         )
-import Dict
 
 
-view : Store -> Bool -> Assemblage -> ( List (Html Msg), List Tag )
-view store h1Link assemblage =
+view :
+    Bool
+    -> List Assemblage
+    -> List Assemblage
+    -> List Tag
+    -> Assemblage
+    -> ( List (Html Msg), List Tag )
+view h1Link composers reconstructors tags composition =
     let
-        allTags =
-            List.filterMap (flip Dict.get store.tags) assemblage.tagIds
-
         ( creationDateTags, tags_ ) =
-            List.partition ((==) "creation_date" << .key) allTags
+            List.partition ((==) "creation_date" << .key) tags
 
-        ( tonalityTags, tags ) =
+        ( tonalityTags, tags__ ) =
             List.partition ((==) "tonality" << .key) tags_
 
         tonality =
@@ -36,20 +36,12 @@ view store h1Link assemblage =
 
         name =
             if h1Link then
-                assemblageLink assemblage
+                assemblageLink composition
             else
-                (text << .name) assemblage
+                (text << .name) composition
 
         nameHeader =
             h1 [] (name :: tonality)
-
-        composers =
-            assemblagesThroughAssemblies
-                store
-                assemblage
-                .childAssemblageId
-                .assemblageId
-                Assembly.Composed
 
         creationDate =
             case creationDateTags of
@@ -67,14 +59,6 @@ view store h1Link assemblage =
                 val ->
                     [ h3 [] (text "composed by " :: enumerateLinks val ++ creationDate) ]
 
-        reconstructors =
-            assemblagesThroughAssemblies
-                store
-                assemblage
-                .childAssemblageId
-                .assemblageId
-                Assembly.Reconstructed
-
         reconstructedByHeader =
             case reconstructors of
                 [] ->
@@ -83,4 +67,4 @@ view store h1Link assemblage =
                 val ->
                     [ h4 [] (text "reconstructed by " :: enumerateLinks val) ]
     in
-        ( [ div [ class "composition-header" ] (nameHeader :: composedByHeader ++ reconstructedByHeader) ], tags )
+        ( [ div [ class "composition-header" ] (nameHeader :: composedByHeader ++ reconstructedByHeader) ], tags__ )

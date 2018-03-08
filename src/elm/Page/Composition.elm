@@ -1,31 +1,30 @@
 module Page.Composition exposing (..)
 
 import Html exposing (Html, text)
+import Data.Assemblage as Assemblage exposing (Assemblage)
+import Data.Tag as Tag exposing (Tag)
 import View.Assemblage
 import View.Composition.Header
 import View.Common
-import Store exposing (Store, assemblagesThroughAssemblies)
-import Data.Assemblage as Assemblage exposing (Assemblage)
-import Data.Assembly as Assembly
 import Messages exposing (Msg)
 import I18n exposing (t)
 
 
-view : String -> Assemblage -> I18n.Language -> Store -> List (Html Msg)
-view endpoint assemblage language store =
+view :
+    List Assemblage
+    -> List Assemblage
+    -> List Tag
+    -> List Assemblage
+    -> Assemblage
+    -> I18n.Language
+    -> String
+    -> List (Html Msg)
+view composers reconstructors tags embodiments composition language endpoint =
     let
-        ( header, tags ) =
-            View.Composition.Header.view store False assemblage
-
-        recordings =
-            assemblagesThroughAssemblies
-                store
-                assemblage
-                .assemblageId
-                .childAssemblageId
-                Assembly.Recorded
+        ( header, tags_ ) =
+            View.Composition.Header.view False composers reconstructors tags composition
     in
         header
-            ++ View.Common.tagsRow tags
-            ++ View.Assemblage.table (t language I18n.Performances) recordings
+            ++ View.Common.tagsRow tags_
+            ++ View.Assemblage.table (t language I18n.Performances) embodiments
             ++ View.Common.fileTable endpoint []

@@ -279,7 +279,7 @@ routeToPage server language route =
                 Server.Authenticated _ store ->
                     case Dict.get id store.assemblages of
                         Just assemblage ->
-                            Page.Assemblage.view server.endpoint assemblage language store
+                            Page.Assemblage.view assemblage store language server.endpoint
 
                         Nothing ->
                             Page.NotFound.view language
