@@ -5,7 +5,7 @@ import Components.Flash as Flash
 import Routing
 import Navigation
 import Connection
-import Connection.Server as Server
+import Connection.Server.Types as ServerTypes
 import Celeste
 import I18n
 import Components.Player as Player
@@ -15,7 +15,7 @@ type Msg
     = Noop
     | SetLanguage I18n.Language
     | SignIn
-    | SignInSucceed Server.User
+    | SignInSucceed ServerTypes.User
     | SignInFail Http.Error
     | FlashMsg Flash.Msg
     | HangUp ( Celeste.Outcome, Routing.Route )

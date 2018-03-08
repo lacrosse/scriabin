@@ -6,6 +6,8 @@ import Data.Assemblage exposing (Assemblage)
 import Data.Assembly exposing (Assembly)
 import Data.File exposing (File)
 import Data.Tag exposing (Tag)
+import Connection.Session
+import Connection.Server.Types
 import Jwt
 import Http
 
@@ -17,12 +19,14 @@ type Route
     = Composers
     | Assemblage Int
     | Account
+    | Session
 
 
 type Response
     = ComposersResponse (List Assemblage)
     | AssemblageResponse ( Assemblage, List Assemblage, List Assembly, List File, List Tag )
     | AccountResponse String
+    | SessionResponse Connection.Server.Types.User
 
 
 type alias ResponseResult =
@@ -54,6 +58,9 @@ url endpoint route =
 
                 Account ->
                     "/account"
+
+                Session ->
+                    "/session"
     in
         endpoint ++ relative
 
@@ -75,6 +82,38 @@ decoderForRoute route =
 
         Account ->
             JD.map AccountResponse <| Data.Account.jsonDecoder
+
+        Session ->
+            JD.map SessionResponse <| Connection.Session.decoder
+
+
+decodeError : String -> Result String String
+decodeError =
+    JD.decodeString (JD.field "error" JD.string)
+
+
+errorToMessage : Http.Error -> String
+errorToMessage error =
+    case error of
+        Http.BadStatus { body } ->
+            case decodeError body of
+                Ok val ->
+                    val
+
+                _ ->
+                    "Something went wrong!"
+
+        Http.Timeout ->
+            "Request timeout"
+
+        Http.BadUrl val ->
+            "Bad request URL"
+
+        Http.NetworkError ->
+            "Could not connect"
+
+        Http.BadPayload explanation _ ->
+            explanation
 
 
 responseToTuple : Response -> ResponseTuple

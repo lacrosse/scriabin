@@ -1,7 +1,10 @@
+require('./migrations.js');
+
 var Scriabin = require('../elm/Main');
 
 window.ScriabinApp = Scriabin.Main.embed(document.getElementById('app'), {
-  endpoint: window.localStorage.getItem('endpoint'),
+  host: window.localStorage.getItem('host'),
+  port_: window.localStorage.getItem('port'),
   token: window.localStorage.getItem('token'),
 });
 

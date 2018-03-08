@@ -31,7 +31,6 @@ import Html.Events
         ( onClick
         , onWithOptions
         )
-import Http
 import Navigation
 import Dict
 import Page.Root
@@ -78,7 +77,8 @@ main =
 
 
 type alias Flags =
-    { endpoint : Maybe String
+    { host : Maybe String
+    , port_ : Maybe String
     , token : Maybe String
     }
 
@@ -93,13 +93,13 @@ type alias Model =
 
 
 init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
-init { endpoint, token } navLoc =
+init { host, port_, token } navLoc =
     let
         model_ =
             { routing = Routing.initialModel
             , language = I18n.English
             , flash = Flash.initialModel
-            , connection = Connection.initialModel endpoint token
+            , connection = Connection.initialModel ( host, port_ ) token
             , player = Player.initialModel
             }
 
@@ -149,26 +149,19 @@ update msg model =
                 ( { model | connection = updatedConnection }, Cmd.map ConnectionMsg cmd )
 
         HangUp ( outcome, route ) ->
-            case outcome of
-                Ok celesteTuple ->
-                    let
-                        ( model_, cmd_ ) =
+            let
+                ( model_, outcomeCmd ) =
+                    case outcome of
+                        Ok celesteTuple ->
                             update (ConnectionMsg << Connection.ServerMsg << Server.StoreRecords <| celesteTuple) model
 
-                        ( model__, cmd__ ) =
-                            update (RoutingMsg (Routing.FinishTransition (Just route))) model_
-                    in
-                        ( model__, Cmd.batch [ cmd_, cmd__ ] )
+                        Err string ->
+                            update (FlashMsg (Flash.SetError string)) model
 
-                Err string ->
-                    let
-                        ( model_, cmd_ ) =
-                            update (FlashMsg (Flash.DeriveFromString string)) model
-
-                        ( model__, cmd__ ) =
-                            update (RoutingMsg (Routing.FinishTransition (Just route))) model_
-                    in
-                        ( model__, Cmd.batch [ cmd_, cmd__ ] )
+                ( model__, routingCmd ) =
+                    update (RoutingMsg (Routing.FinishTransition (Just route))) model_
+            in
+                ( model__, Cmd.batch [ outcomeCmd, routingCmd ] )
 
         SetRoute route ->
             ( model, Navigation.newUrl (Routing.routeToString route) )
@@ -206,14 +199,7 @@ update msg model =
                             Cmd.none
 
                         Just server ->
-                            case server.state of
-                                Server.Authenticated _ _ ->
-                                    Cmd.none
-
-                                Server.NotAuthenticated wannabe ->
-                                    wannabe
-                                        |> Server.signIn server.endpoint
-                                        |> Http.send responseToMsg
+                            Server.signInCmd server responseToMsg
             in
                 ( model, cmd )
 
@@ -228,12 +214,7 @@ update msg model =
                 ( model__, Cmd.batch [ serverCmd, redirect ] )
 
         SignInFail error ->
-            case error of
-                Http.BadStatus resp ->
-                    (update << FlashMsg << Flash.DeriveFromResponse) resp model
-
-                _ ->
-                    ( model, Cmd.none )
+            (update << FlashMsg << Flash.SetError << Celeste.errorToMessage) error model
 
 
 

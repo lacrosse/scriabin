@@ -27,18 +27,26 @@ import Components.Bootstrap
         )
 
 
-view : String -> Language -> List (Html Msg)
-view endpoint language =
+view : ( String, String ) -> Language -> List (Html Msg)
+view ( host, port_ ) language =
     [ h1 [] [ text "Vous êtes déconnecté." ]
     , horizontalForm (ConnectionMsg Connection.Connect)
         [ inputFormGroup
             "server"
-            "endpoint"
-            "Endpoint"
+            "host"
+            "Host"
             "text"
-            endpoint
-            (ConnectionMsg << Connection.UpdateWannabeEndpoint)
-            [ placeholder "https://localhost:9000/api" ]
+            host
+            (ConnectionMsg << Connection.UpdateWannabeHost)
+            [ placeholder "localhost" ]
+        , inputFormGroup
+            "server"
+            "port"
+            "Port"
+            "text"
+            port_
+            (ConnectionMsg << Connection.UpdateWannabePort)
+            [ placeholder "1493" ]
         , div [ class "form-group" ]
             [ div [ class "col-lg-10 col-lg-offset-2" ]
                 [ button

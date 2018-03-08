@@ -6,18 +6,18 @@ import LocalStorage
 
 type alias Model =
     { currentServer : Maybe Server.Model
-    , wannabeEndpoint : String
+    , wannabeEndpoint : ( String, String )
     }
 
 
-initialModel : Maybe String -> Maybe String -> Model
-initialModel maybeEndpoint maybeToken =
-    case maybeEndpoint of
+initialModel : ( Maybe String, Maybe String ) -> Maybe String -> Model
+initialModel ( maybeHost, maybePort ) maybeToken =
+    case maybeHost of
         Nothing ->
-            { currentServer = Nothing, wannabeEndpoint = "" }
+            { currentServer = Nothing, wannabeEndpoint = ( "", "" ) }
 
-        Just endpoint ->
-            { currentServer = Just (Server.initialModel endpoint maybeToken), wannabeEndpoint = "" }
+        Just host ->
+            { currentServer = Just (Server.initialModel ( host, maybePort ) maybeToken), wannabeEndpoint = ( "", "" ) }
 
 
 
@@ -27,7 +27,8 @@ initialModel maybeEndpoint maybeToken =
 type Msg
     = ServerMsg Server.Msg
     | Disconnect
-    | UpdateWannabeEndpoint String
+    | UpdateWannabeHost String
+    | UpdateWannabePort String
     | Connect
 
 
@@ -37,11 +38,32 @@ update msg model =
         Disconnect ->
             ( { model | currentServer = Nothing }, LocalStorage.remove "endpoint" )
 
-        UpdateWannabeEndpoint endpoint ->
-            ( { model | wannabeEndpoint = endpoint }, Cmd.none )
+        UpdateWannabeHost host ->
+            let
+                ( _, port_ ) =
+                    model.wannabeEndpoint
+            in
+                ( { model | wannabeEndpoint = ( host, port_ ) }, Cmd.none )
+
+        UpdateWannabePort port_ ->
+            let
+                ( host, _ ) =
+                    model.wannabeEndpoint
+            in
+                ( { model | wannabeEndpoint = ( host, port_ ) }, Cmd.none )
 
         Connect ->
-            ( { model | currentServer = Just (Server.initialModel model.wannabeEndpoint Nothing) }, LocalStorage.set "endpoint" model.wannabeEndpoint )
+            let
+                ( host, port_ ) =
+                    model.wannabeEndpoint
+
+                localStorageCmd =
+                    Cmd.batch
+                        [ LocalStorage.set "host" host
+                        , LocalStorage.set "port" port_
+                        ]
+            in
+                ( { model | currentServer = Just (Server.initialModel ( host, Just port_ ) Nothing) }, localStorageCmd )
 
         ServerMsg msg ->
             case model.currentServer of

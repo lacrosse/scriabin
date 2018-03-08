@@ -1,26 +1,12 @@
 module Connection.Server exposing (..)
 
 import Http
-import Json.Encode as JE
-import Json.Decode as JD
 import Jwt
 import Store
 import Celeste
 import LocalStorage
-
-
-type alias User =
-    { username : String
-    , jwt : String
-    , stats : List String
-    , lastfm : Maybe String
-    }
-
-
-type alias Wannabe =
-    { username : String
-    , password : String
-    }
+import Connection.Server.Types exposing (..)
+import Connection.Session
 
 
 type State
@@ -56,9 +42,23 @@ initialUser endpoint mToken =
     mToken |> Maybe.andThen (fetchUser endpoint)
 
 
-initialModel : String -> Maybe String -> Model
-initialModel endpoint token =
+initialModel : ( String, Maybe String ) -> Maybe String -> Model
+initialModel ( host, maybePort ) token =
     let
+        delimitedPort =
+            case maybePort of
+                Just port_ ->
+                    if String.isEmpty port_ then
+                        ""
+                    else
+                        ":" ++ port_
+
+                Nothing ->
+                    ""
+
+        endpoint =
+            "http://" ++ host ++ delimitedPort ++ "/api"
+
         state =
             case initialUser endpoint token of
                 Just user ->
@@ -171,32 +171,18 @@ fetchUser endpoint jwt =
         Just user
 
 
-sessionDecoder : JD.Decoder User
-sessionDecoder =
-    let
-        f username jwt =
-            User username jwt [] Nothing
-    in
-        JD.field "session"
-            (JD.map2
-                f
-                (JD.field "username" JD.string)
-                (JD.field "jwt" JD.string)
-            )
+signInCmd : Model -> (Result Http.Error User -> msg) -> Cmd msg
+signInCmd { state, endpoint } responseToMsg =
+    case state of
+        Authenticated _ _ ->
+            Cmd.none
+
+        NotAuthenticated wannabe ->
+            wannabe
+                |> signInRequest endpoint
+                |> Http.send responseToMsg
 
 
-sessionEncoder : Wannabe -> JE.Value
-sessionEncoder { username, password } =
-    JE.object
-        [ ( "session"
-          , JE.object
-                [ ( "username", JE.string username )
-                , ( "password", JE.string password )
-                ]
-          )
-        ]
-
-
-signIn : String -> Wannabe -> Http.Request User
-signIn endpoint =
-    Jwt.authenticate (endpoint ++ "/session") sessionDecoder << sessionEncoder
+signInRequest : String -> Wannabe -> Http.Request User
+signInRequest endpoint wannabe =
+    Jwt.authenticate (Celeste.url endpoint Celeste.Session) Connection.Session.decoder (Connection.Session.encoder wannabe)
