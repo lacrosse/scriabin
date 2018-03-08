@@ -9,64 +9,63 @@ import Page.Person
 import Page.Composition
 import Page.Performance
 import Store exposing (Store)
-import Dict
 
 
 view : Assemblage -> Store -> I18n.Language -> String -> List (Html Msg)
 view assemblage store =
     let
         joinAssemblagesThrough =
-            Store.assemblagesThroughAssemblies
-                store
-                assemblage
+            assemblage
+                |> Store.assemblagesThroughAssemblies store
 
-        parentAssemblagesThroughAssemblies =
-            joinAssemblagesThrough .childAssemblageId .assemblageId
+        parentAssemblages =
+            joinAssemblagesThrough ( .childAssemblageId, .assemblageId )
 
-        childrenAssemblagesThroughAssemblies =
-            joinAssemblagesThrough .assemblageId .childAssemblageId
+        childrenAssemblages =
+            joinAssemblagesThrough ( .assemblageId, .childAssemblageId )
 
         composers =
-            parentAssemblagesThroughAssemblies Assembly.Composed
+            parentAssemblages Assembly.Composed
 
         reconstructors =
-            parentAssemblagesThroughAssemblies Assembly.Reconstructed
+            parentAssemblages Assembly.Reconstructed
 
         files =
-            assemblage.fileIds
-                |> List.filterMap (flip Dict.get store.files)
+            assemblage
+                |> Store.project store ( .fileIds, .files )
                 |> List.sortBy .name
 
         childrenCompositions =
-            childrenAssemblagesThroughAssemblies Assembly.Composed
+            childrenAssemblages Assembly.Composed
 
         childrenPerformances =
-            childrenAssemblagesThroughAssemblies Assembly.Performed
+            childrenAssemblages Assembly.Performed
 
         reconstructions =
-            childrenAssemblagesThroughAssemblies Assembly.Reconstructed
+            childrenAssemblages Assembly.Reconstructed
 
-        tagsFor a =
-            List.filterMap (flip Dict.get store.tags) a.tagIds
+        tagsFor assemblage =
+            assemblage
+                |> Store.project store ( .tagIds, .tags )
 
         tags =
             tagsFor assemblage
 
         parentCompositions =
-            parentAssemblagesThroughAssemblies Assembly.EmbodiedBy
+            parentAssemblages Assembly.EmbodiedBy
 
         parentCompositionsWithTags =
             parentCompositions
                 |> List.map (\composition -> ( composition, tagsFor composition ))
 
         embodiments =
-            childrenAssemblagesThroughAssemblies Assembly.EmbodiedBy
+            childrenAssemblages Assembly.EmbodiedBy
 
         performers =
-            parentAssemblagesThroughAssemblies Assembly.Performed
+            parentAssemblages Assembly.Performed
 
         generics =
-            childrenAssemblagesThroughAssemblies Assembly.Generic
+            childrenAssemblages Assembly.Generic
     in
         case assemblage.kind of
             Assemblage.Person ->

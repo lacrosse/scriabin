@@ -79,16 +79,21 @@ update ( assemblages, assemblies, files, tags ) model =
 -- FUNCTIONS
 
 
+project : Model -> ( a -> List comparable, Model -> Dict comparable v ) -> a -> List v
+project store ( from, to ) origin =
+    origin
+        |> from
+        |> List.filterMap (flip Dict.get (to store))
+
+
 assemblagesThroughAssemblies :
     Store
     -> Assemblage
-    -> (Assembly -> Int)
-    -> (Assembly -> Int)
+    -> ( Assembly -> Int, Assembly -> Int )
     -> Data.Assembly.Kind
     -> List Assemblage
-assemblagesThroughAssemblies { assemblies, assemblages } { id } foreignKey furtherForeignKey assemblyKind =
-    assemblies
+assemblagesThroughAssemblies store { id } ( foreignKey, nextForeignKey ) assemblyKind =
+    store.assemblies
         |> Dict.filter (always (\a -> (foreignKey a) == id && (.kind a) == assemblyKind))
         |> Dict.values
-        |> List.map furtherForeignKey
-        |> List.filterMap (flip Dict.get assemblages)
+        |> project store ( List.map nextForeignKey, .assemblages )
