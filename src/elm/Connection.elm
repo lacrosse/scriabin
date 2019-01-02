@@ -1,23 +1,35 @@
 module Connection exposing (..)
 
 import Connection.Server as Server
+import Connection.Server.Types
 import LocalStorage
 
 
-type alias Model =
-    { currentServer : Maybe Server.Model
-    , wannabeEndpoint : ( String, String )
-    }
+type Model
+    = Connected Server.Model
+    | Disconnected Connection.Server.Types.Endpoint
 
 
-initialModel : ( Maybe String, Maybe String ) -> Maybe String -> Model
-initialModel ( maybeHost, maybePort ) maybeToken =
+initialDisconnected :
+    ( Maybe String, Maybe String )
+    -> (( String, String ) -> Cmd msg)
+    -> ( Model, Cmd msg )
+initialDisconnected ( maybeHost, maybePort ) tryConnect =
     case maybeHost of
         Nothing ->
-            { currentServer = Nothing, wannabeEndpoint = ( "", "" ) }
+            ( Disconnected ( "", "" ), Cmd.none )
 
         Just host ->
-            { currentServer = Just (Server.initialModel ( host, maybePort ) maybeToken), wannabeEndpoint = ( "", "" ) }
+            case maybePort of
+                Nothing ->
+                    ( Disconnected ( host, "" ), Cmd.none )
+
+                Just port_ ->
+                    let
+                        endpoint =
+                            ( host, port_ )
+                    in
+                        ( Disconnected endpoint, tryConnect endpoint )
 
 
 
@@ -25,54 +37,64 @@ initialModel ( maybeHost, maybePort ) maybeToken =
 
 
 type Msg
-    = ServerMsg Server.Msg
-    | Disconnect
+    = Disconnect Connection.Server.Types.Endpoint
     | UpdateWannabeHost String
     | UpdateWannabePort String
     | Connect
+    | ServerMsg Server.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Disconnect ->
-            ( { model | currentServer = Nothing }, LocalStorage.remove "endpoint" )
+        Disconnect endpoint ->
+            case model of
+                Disconnected _ ->
+                    ( model, Cmd.none )
+
+                Connected server ->
+                    ( Disconnected endpoint
+                    , Cmd.batch [ LocalStorage.remove "host", LocalStorage.remove "port" ]
+                    )
 
         UpdateWannabeHost host ->
-            let
-                ( _, port_ ) =
-                    model.wannabeEndpoint
-            in
-                ( { model | wannabeEndpoint = ( host, port_ ) }, Cmd.none )
+            ( case model of
+                Connected _ ->
+                    model
+
+                Disconnected ( _, port_ ) ->
+                    Disconnected ( host, port_ )
+            , Cmd.none
+            )
 
         UpdateWannabePort port_ ->
-            let
-                ( host, _ ) =
-                    model.wannabeEndpoint
-            in
-                ( { model | wannabeEndpoint = ( host, port_ ) }, Cmd.none )
+            ( case model of
+                Connected _ ->
+                    model
+
+                Disconnected ( host, _ ) ->
+                    Disconnected ( host, port_ )
+            , Cmd.none
+            )
 
         Connect ->
-            let
-                ( host, port_ ) =
-                    model.wannabeEndpoint
+            case model of
+                Connected _ ->
+                    ( model, Cmd.none )
 
-                localStorageCmd =
-                    Cmd.batch
-                        [ LocalStorage.set "host" host
-                        , LocalStorage.set "port" port_
-                        ]
-            in
-                ( { model | currentServer = Just (Server.initialModel ( host, Just port_ ) Nothing) }, localStorageCmd )
+                Disconnected ( host, port_ ) ->
+                    ( Connected (Server.initialModel ( host, port_ ) Nothing)
+                    , Cmd.batch [ LocalStorage.set "host" host, LocalStorage.set "port" port_ ]
+                    )
 
         ServerMsg msg ->
-            case model.currentServer of
-                Just server ->
+            case model of
+                Disconnected _ ->
+                    ( model, Cmd.none )
+
+                Connected server ->
                     let
                         ( server_, cmd ) =
                             Server.update msg server
                     in
-                        ( { model | currentServer = Just server_ }, Cmd.map ServerMsg cmd )
-
-                Nothing ->
-                    ( model, Cmd.none )
+                        ( Connected server_, Cmd.map ServerMsg cmd )

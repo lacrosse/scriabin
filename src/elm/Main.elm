@@ -48,6 +48,8 @@ import Components.Player as Player
 import Routing
 import Connection
 import Connection.Server as Server
+import Connection.Server.Types
+import Http
 import Celeste
 import Json.Decode as JD
 import View.Common
@@ -95,18 +97,38 @@ type alias Model =
 init : Flags -> Navigation.Location -> ( Model, Cmd Msg )
 init { host, port_, token } navLoc =
     let
+        ( connection, connectionCmd ) =
+            Connection.initialDisconnected ( host, port_ ) tryConnect
+
         model_ =
             { routing = Routing.initialModel
             , language = I18n.English
             , flash = Flash.initialModel
-            , connection = Connection.initialModel ( host, port_ ) token
+            , connection = connection
             , player = Player.initialModel
             }
 
         ( model, navCmd ) =
             processLocation navLoc model_
     in
-        ( model, navCmd )
+        ( model, Cmd.batch [ connectionCmd, navCmd ] )
+
+
+tryConnect : Connection.Server.Types.Endpoint -> Cmd Msg
+tryConnect endpoint =
+    let
+        request =
+            Server.pingRequest endpoint
+
+        handler result =
+            case result of
+                Ok _ ->
+                    ConnectSucceed endpoint
+
+                Err _ ->
+                    ConnectFail endpoint
+    in
+        Cmd.batch [ Http.send handler request ]
 
 
 
@@ -130,11 +152,11 @@ update msg model =
                 ( { model | flash = updatedFlash }, Cmd.map FlashMsg cmd )
 
         PlayerMsg msg ->
-            case model.connection.currentServer of
-                Nothing ->
+            case model.connection of
+                Connection.Disconnected _ ->
                     ( model, Cmd.none )
 
-                Just server ->
+                Connection.Connected server ->
                     let
                         ( player_, cmd ) =
                             Player.update msg model.player server.endpoint
@@ -147,6 +169,12 @@ update msg model =
                     Connection.update msg model.connection
             in
                 ( { model | connection = updatedConnection }, Cmd.map ConnectionMsg cmd )
+
+        ConnectSucceed endpoint ->
+            update (ConnectionMsg Connection.Connect) model
+
+        ConnectFail endpoint ->
+            update (ConnectionMsg << Connection.Disconnect <| endpoint) model
 
         HangUp ( outcome, route ) ->
             let
@@ -185,21 +213,21 @@ update msg model =
 
         SignIn ->
             let
-                responseToMsg resp =
-                    case resp of
-                        Ok user ->
-                            SignInSucceed user
-
-                        Err error ->
-                            SignInFail error
-
                 cmd =
-                    case model.connection.currentServer of
-                        Nothing ->
+                    case model.connection of
+                        Connection.Disconnected _ ->
                             Cmd.none
 
-                        Just server ->
-                            Server.signInCmd server responseToMsg
+                        Connection.Connected server ->
+                            Server.signInCmd server
+                                (\resp ->
+                                    case resp of
+                                        Ok user ->
+                                            SignInSucceed user
+
+                                        Err error ->
+                                            SignInFail error
+                                )
             in
                 ( model, cmd )
 
@@ -234,15 +262,15 @@ view : Model -> Html Msg
 view model =
     case model.routing.currentRoute of
         Just route ->
-            case model.connection.currentServer of
-                Just server ->
+            case model.connection of
+                Connection.Connected server ->
                     withLayout model (routeToPage server model.language route)
 
-                Nothing ->
+                Connection.Disconnected wannabeEndpoint ->
                     withOverlay model.routing.transitioning <|
                         case route of
                             Routing.Root ->
-                                Page.Disconnected.view model.connection.wannabeEndpoint model.language
+                                Page.Disconnected.view wannabeEndpoint model.language
 
                             _ ->
                                 Page.NotFound.view model.language
@@ -325,11 +353,11 @@ withLayout model content =
                 ]
 
         leftNav =
-            case model.connection.currentServer of
-                Nothing ->
+            case model.connection of
+                Connection.Disconnected _ ->
                     []
 
-                Just server ->
+                Connection.Connected server ->
                     case server.state of
                         Server.NotAuthenticated _ ->
                             []
@@ -370,11 +398,11 @@ withLayout model content =
             ]
 
         authRightNavContent =
-            case model.connection.currentServer of
-                Nothing ->
+            case model.connection of
+                Connection.Disconnected _ ->
                     []
 
-                Just server ->
+                Connection.Connected server ->
                     let
                         serverMenu =
                             case server.state of
@@ -411,7 +439,7 @@ withLayout model content =
 
                         connectionMenu =
                             [ li []
-                                [ a [ href "#", onClick (ConnectionMsg Connection.Disconnect) ]
+                                [ a [ href "#", onClick (ConnectionMsg << Connection.Disconnect <| server.endpoint) ]
                                     (fa "chain-broken" :: [ text "Disconnect" ])
                                 ]
                             ]
@@ -476,11 +504,11 @@ celesteRouteForAppRoute route =
 
 processLocation : Navigation.Location -> Model -> ( Model, Cmd Msg )
 processLocation location model =
-    case model.connection.currentServer of
-        Nothing ->
+    case model.connection of
+        Connection.Disconnected _ ->
             update (RoutingMsg <| Routing.FinishTransition <| Just Routing.Root) model
 
-        Just server ->
+        Connection.Connected server ->
             let
                 maybeAppRoute =
                     Routing.locationToRoute location

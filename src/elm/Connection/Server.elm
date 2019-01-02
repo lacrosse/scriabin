@@ -18,16 +18,16 @@ type alias MaybeCmd msg =
     Maybe (Cmd msg)
 
 
-type alias PreauthMaybeCmd msg =
-    String -> String -> MaybeCmd msg
+type alias MaybeAuthenticatedCmd msg =
+    Endpoint -> String -> MaybeCmd msg
 
 
 type alias FetchAndHandle msg =
-    Celeste.Route -> (Celeste.ResponseResult -> msg) -> PreauthMaybeCmd msg
+    Celeste.Route -> (Celeste.ResponseResult -> msg) -> MaybeAuthenticatedCmd msg
 
 
 type alias Model =
-    { endpoint : String
+    { endpoint : Endpoint
     , state : State
     }
 
@@ -37,28 +37,14 @@ initialWannabe =
     { username = "", password = "" }
 
 
-initialUser : String -> Maybe String -> Maybe User
+initialUser : Endpoint -> Maybe String -> Maybe User
 initialUser endpoint mToken =
     mToken |> Maybe.andThen (fetchUser endpoint)
 
 
-initialModel : ( String, Maybe String ) -> Maybe String -> Model
-initialModel ( host, maybePort ) token =
+initialModel : Endpoint -> Maybe String -> Model
+initialModel endpoint token =
     let
-        delimitedPort =
-            case maybePort of
-                Just port_ ->
-                    if String.isEmpty port_ then
-                        ""
-                    else
-                        ":" ++ port_
-
-                Nothing ->
-                    ""
-
-        endpoint =
-            "http://" ++ host ++ delimitedPort ++ "/api"
-
         state =
             case initialUser endpoint token of
                 Just user ->
@@ -148,7 +134,7 @@ fetchAndHandle celesteRoute resultHandler endpoint jwt =
         Just (Jwt.send resultHandler get)
 
 
-maybeAuthenticatedFetchAndHandle : (FetchAndHandle msg -> PreauthMaybeCmd msg) -> Model -> MaybeCmd msg
+maybeAuthenticatedFetchAndHandle : (FetchAndHandle msg -> MaybeAuthenticatedCmd msg) -> Model -> MaybeCmd msg
 maybeAuthenticatedFetchAndHandle fetchWrapper model =
     case model.state of
         Authenticated { jwt } _ ->
@@ -158,7 +144,7 @@ maybeAuthenticatedFetchAndHandle fetchWrapper model =
             Nothing
 
 
-fetchUser : String -> String -> Maybe User
+fetchUser : Endpoint -> String -> Maybe User
 fetchUser endpoint jwt =
     let
         user =
@@ -183,6 +169,19 @@ signInCmd { state, endpoint } responseToMsg =
                 |> Http.send responseToMsg
 
 
-signInRequest : String -> Wannabe -> Http.Request User
+signInRequest : Endpoint -> Wannabe -> Http.Request User
 signInRequest endpoint wannabe =
     Jwt.authenticate (Celeste.url endpoint Celeste.Session) Connection.Session.decoder (Connection.Session.encoder wannabe)
+
+
+pingRequest : Endpoint -> Http.Request String
+pingRequest endpoint =
+    Http.request
+        { method = "GET"
+        , headers = []
+        , url = Celeste.url endpoint Celeste.Root
+        , body = Http.emptyBody
+        , expect = Http.expectString
+        , timeout = Just 2000
+        , withCredentials = False
+        }

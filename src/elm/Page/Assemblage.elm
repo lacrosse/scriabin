@@ -9,9 +9,10 @@ import Page.Person
 import Page.Composition
 import Page.Performance
 import Store exposing (Store)
+import Connection.Server.Types exposing (Endpoint)
 
 
-view : Assemblage -> Store -> I18n.Language -> String -> List (Html Msg)
+view : Assemblage -> Store -> I18n.Language -> Endpoint -> List (Html Msg)
 view assemblage store =
     let
         joinAssemblagesThrough assemblage =

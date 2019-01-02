@@ -11,6 +11,7 @@ import Json.Decode as JD
 import Json.Encode as JE
 import Data.Assemblage exposing (Assemblage)
 import Data.File exposing (File)
+import Connection.Server.Types exposing (Endpoint)
 
 
 -- MODEL
@@ -51,7 +52,7 @@ type Msg
 port webAudioControl : JE.Value -> Cmd msg
 
 
-toWebAudioCommand : String -> Model -> JE.Value
+toWebAudioCommand : Endpoint -> Model -> JE.Value
 toWebAudioCommand endpoint player =
     case player of
         Working state ( time, _ ) file _ _ ->
@@ -70,7 +71,7 @@ toWebAudioCommand endpoint player =
             JE.object [ ( "action", JE.string "stop" ) ]
 
 
-syncWebAudio : String -> Model -> Cmd Msg
+syncWebAudio : Endpoint -> Model -> Cmd Msg
 syncWebAudio endpoint player =
     (webAudioControl << toWebAudioCommand endpoint) player
 
@@ -90,7 +91,7 @@ toTitleCmd model =
             Components.PageTitle.reset
 
 
-commandNature : Model -> String -> ( Model, Cmd Msg )
+commandNature : Model -> Endpoint -> ( Model, Cmd Msg )
 commandNature model endpoint =
     let
         titleCmd =
@@ -102,7 +103,7 @@ commandNature model endpoint =
         ( model, Cmd.batch ([ titleCmd, webAudioCmd ]) )
 
 
-update : Msg -> Model -> String -> ( Model, Cmd Msg )
+update : Msg -> Model -> Endpoint -> ( Model, Cmd Msg )
 update msg model endpoint =
     case msg of
         Stop ->

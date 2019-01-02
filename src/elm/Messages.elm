@@ -14,6 +14,9 @@ import Components.Player as Player
 type Msg
     = Noop
     | SetLanguage I18n.Language
+    | ConnectionMsg Connection.Msg
+    | ConnectSucceed ServerTypes.Endpoint
+    | ConnectFail ServerTypes.Endpoint
     | SignIn
     | SignInSucceed ServerTypes.User
     | SignInFail Http.Error
@@ -23,4 +26,3 @@ type Msg
     | RoutingMsg Routing.Msg
     | VisitLocation Navigation.Location
     | PlayerMsg Player.Msg
-    | ConnectionMsg Connection.Msg

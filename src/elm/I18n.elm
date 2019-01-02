@@ -1,6 +1,8 @@
 module I18n exposing (..)
 
 import Html exposing (Html, text, code)
+import Connection.Server.Types exposing (Endpoint)
+import Celeste.Url as Url
 
 
 type Language
@@ -10,7 +12,7 @@ type Language
 
 type Sentence
     = Welcome
-    | YouAreConnectedTo String
+    | YouAreConnectedTo Endpoint
     | NoReasonToPanic
     | Composers
     | Compositions
@@ -32,8 +34,8 @@ t language line =
                 Welcome ->
                     [ text "Welcome!" ]
 
-                YouAreConnectedTo url ->
-                    [ text "You are connected to ", code [] [ text url ], text "." ]
+                YouAreConnectedTo endpoint ->
+                    [ text "You are connected to ", code [] [ text (Url.api endpoint) ], text "." ]
 
                 NoReasonToPanic ->
                     [ text "There is no reason to panic." ]
@@ -73,8 +75,8 @@ t language line =
                 Welcome ->
                     [ text "Добро пожаловать!" ]
 
-                YouAreConnectedTo url ->
-                    [ text "Вы подключены к ", code [] [ text url ], text "." ]
+                YouAreConnectedTo endpoint ->
+                    [ text "Вы подключены к ", code [] [ text (Url.api endpoint) ], text "." ]
 
                 NoReasonToPanic ->
                     [ text "Всё будет хорошо." ]

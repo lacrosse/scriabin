@@ -9,6 +9,7 @@ import View.Composition.Header
 import View.Common
 import Messages exposing (Msg)
 import I18n
+import Connection.Server.Types exposing (Endpoint)
 
 
 view :
@@ -18,7 +19,7 @@ view :
     -> List Assemblage
     -> List File
     -> I18n.Language
-    -> String
+    -> Endpoint
     -> List (Html Msg)
 view performance compositionsWithComposersReconstructorsAndTags performers generics files language endpoint =
     let

@@ -8,6 +8,7 @@ import View.Composition.Header
 import View.Common
 import Messages exposing (Msg)
 import I18n exposing (t)
+import Connection.Server.Types exposing (Endpoint)
 
 
 view :
@@ -17,7 +18,7 @@ view :
     -> List Assemblage
     -> Assemblage
     -> I18n.Language
-    -> String
+    -> Endpoint
     -> List (Html Msg)
 view composers reconstructors tags embodiments composition language endpoint =
     let

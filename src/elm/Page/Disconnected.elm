@@ -19,6 +19,7 @@ import Html.Attributes
 import I18n exposing (..)
 import Messages exposing (..)
 import Connection
+import Connection.Server.Types
 import Components.FontAwesome exposing (fa)
 import Components.Bootstrap
     exposing
@@ -27,7 +28,7 @@ import Components.Bootstrap
         )
 
 
-view : ( String, String ) -> Language -> List (Html Msg)
+view : Connection.Server.Types.Endpoint -> Language -> List (Html Msg)
 view ( host, port_ ) language =
     [ h1 [] [ text "Vous êtes déconnecté." ]
     , horizontalForm (ConnectionMsg Connection.Connect)

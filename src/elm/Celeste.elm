@@ -10,20 +10,23 @@ import Connection.Session
 import Connection.Server.Types
 import Jwt
 import Http
+import Celeste.Url as Url
 
 
 -- MODEL
 
 
 type Route
-    = Composers
+    = Root
+    | Composers
     | Assemblage Int
     | Account
     | Session
 
 
 type Response
-    = ComposersResponse (List Assemblage)
+    = RootResponse
+    | ComposersResponse (List Assemblage)
     | AssemblageResponse ( Assemblage, List Assemblage, List Assembly, List File, List Tag )
     | AccountResponse String
     | SessionResponse Connection.Server.Types.User
@@ -45,11 +48,14 @@ type alias Outcome =
 -- FUNCTIONS
 
 
-url : String -> Route -> String
+url : Connection.Server.Types.Endpoint -> Route -> String
 url endpoint route =
     let
         relative =
             case route of
+                Root ->
+                    "/"
+
                 Composers ->
                     "/composers"
 
@@ -62,12 +68,15 @@ url endpoint route =
                 Session ->
                     "/session"
     in
-        endpoint ++ relative
+        Url.api endpoint ++ relative
 
 
 decoderForRoute : Route -> JD.Decoder Response
 decoderForRoute route =
     case route of
+        Root ->
+            JD.succeed RootResponse
+
         Composers ->
             (JD.map ComposersResponse << JD.field "assemblages" << JD.list) Data.Assemblage.jsonDecoder
 

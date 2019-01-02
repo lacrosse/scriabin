@@ -35,6 +35,7 @@ import Json.Decode as JD
 import Routing
 import Components.FontAwesome exposing (fa)
 import Components.Player as Player
+import Connection.Server.Types exposing (Endpoint)
 
 
 -- VIEW
@@ -104,7 +105,7 @@ assemblageLink assemblage =
     navLink (Routing.Assemblage assemblage.id (Assemblage.toUrlSlug assemblage)) [] [ text assemblage.name ]
 
 
-fileTable : String -> List File -> List (Html Msg)
+fileTable : Endpoint -> List File -> List (Html Msg)
 fileTable endpoint files =
     if List.isEmpty files then
         []
@@ -120,7 +121,7 @@ fileTable endpoint files =
             |> List.singleton
 
 
-fileRow : String -> List File -> File -> Html Msg
+fileRow : Endpoint -> List File -> File -> Html Msg
 fileRow endpoint files file =
     if file.mime == "audio/mpeg" then
         audioFileRow endpoint files file
@@ -130,7 +131,7 @@ fileRow endpoint files file =
         genericFileRow endpoint file
 
 
-genericFileRow : String -> File -> Html Msg
+genericFileRow : Endpoint -> File -> Html Msg
 genericFileRow endpoint file =
     tr []
         [ td [] []
@@ -138,7 +139,7 @@ genericFileRow endpoint file =
         ]
 
 
-imageFileRow : String -> File -> Html Msg
+imageFileRow : Endpoint -> File -> Html Msg
 imageFileRow endpoint file =
     tr []
         [ td [] [ a [ href (Data.File.url endpoint file), target "_blank" ] [ fa "eye" ] ]
@@ -146,7 +147,7 @@ imageFileRow endpoint file =
         ]
 
 
-audioFileRow : String -> List File -> File -> Html Msg
+audioFileRow : Endpoint -> List File -> File -> Html Msg
 audioFileRow endpoint files file =
     let
         linkOptions msg =
